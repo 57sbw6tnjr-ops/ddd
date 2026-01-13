@@ -1,0 +1,2811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Lina's Shift</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { background: #000; overflow: hidden; font-family: 'Courier New', monospace; height: 100%; width: 100%; position: fixed; }
+        #game-canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+        #ps1-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10;
+            background: repeating-linear-gradient(0deg, rgba(0,0,0,0.03) 0px, rgba(0,0,0,0.03) 1px, transparent 1px, transparent 2px); }
+        #vignette { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 11;
+            background: radial-gradient(ellipse at center, transparent 50%, rgba(0,0,0,0.4) 100%); }
+        
+        #sanity-container { position: fixed; top: 15px; left: 15px; z-index: 20; }
+        #sanity-label { color: #667; font-size: 10px; margin-bottom: 4px; letter-spacing: 1px; }
+        #sanity-bar { width: 120px; height: 6px; background: #222; border-radius: 3px; overflow: hidden; }
+        #sanity-fill { width: 100%; height: 100%; background: linear-gradient(90deg, #a44, #4a4); transition: width 0.5s; }
+        
+        #ui { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; color: #999; padding: 15px; }
+        #dialogue-box { background: rgba(0,0,0,0.92); border: 1px solid #444; padding: 14px 18px; margin-bottom: 10px; 
+            display: none; border-radius: 4px; max-width: 580px; }
+        #dialogue-box.active { display: block; animation: fadeIn 0.3s ease; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #dialogue-speaker { color: #8a8; font-weight: bold; margin-bottom: 5px; font-size: 12px; }
+        #dialogue-text { color: #ddd; line-height: 1.6; font-size: 14px; }
+        #dialogue-text.internal { font-style: italic; color: #9ac; }
+        #dialogue-text.creepy { color: #a88; }
+        #dialogue-text.vivi { color: #a8a; }
+        
+        #choice-container { display: none; margin-top: 12px; }
+        #choice-container.active { display: flex; gap: 10px; flex-wrap: wrap; }
+        .choice-btn { background: rgba(80,80,90,0.3); border: 1px solid #556; color: #aab; padding: 8px 16px;
+            font-size: 12px; cursor: pointer; font-family: monospace; border-radius: 4px; transition: all 0.2s; }
+        .choice-btn:hover { background: rgba(100,100,120,0.4); border-color: #778; }
+        
+        #status-bar { display: flex; justify-content: space-between; align-items: center; 
+            background: rgba(0,0,0,0.7); padding: 10px 15px; border-radius: 4px; flex-wrap: wrap; gap: 10px; }
+        .status-item { font-size: 12px; }
+        #time-display { color: #8a8; }
+        #day-display { color: #88a; }
+        #task-display { color: #ffa; font-size: 13px; font-weight: bold; }
+        #task-display:not(:empty)::before { content: '⚠ '; }
+        
+        #interact-prompt { position: fixed; bottom: 45%; left: 50%; transform: translateX(-50%);
+            background: rgba(0,0,0,0.8); padding: 10px 18px; border: 1px solid #555; border-radius: 4px;
+            display: none; z-index: 20; font-size: 13px; color: #aaa; }
+        #interact-prompt.active { display: block; }
+        
+        #crosshair { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 6px; height: 6px; border: 1px solid rgba(255,255,255,0.4); border-radius: 50%;
+            z-index: 15; pointer-events: none; }
+        
+        #title-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0c0c10;
+            display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 100; padding: 20px; }
+        #title-screen h1 { font-size: clamp(28px, 7vw, 48px); color: #889; text-shadow: 0 0 30px rgba(120,120,140,0.3);
+            margin-bottom: 8px; letter-spacing: 6px; font-weight: normal; }
+        #title-screen .subtitle { color: #556; margin-bottom: 40px; font-size: 12px; letter-spacing: 3px; }
+        #start-btn { background: transparent; border: 1px solid #556; color: #778; padding: 14px 35px;
+            font-size: 15px; cursor: pointer; font-family: 'Courier New', monospace; border-radius: 4px; }
+        #start-btn:hover { background: rgba(100,100,120,0.15); }
+        .controls-info { margin-top: 50px; color: #445; font-size: 11px; text-align: center; line-height: 2; }
+        
+        #transition { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000;
+            z-index: 50; opacity: 0; pointer-events: none; transition: opacity 0.8s ease; display: flex;
+            justify-content: center; align-items: center; flex-direction: column; }
+        #transition.active { opacity: 1; pointer-events: all; }
+        #transition-text { color: #667; font-size: 18px; letter-spacing: 4px; }
+        #transition-subtext { color: #445; font-size: 12px; letter-spacing: 2px; margin-top: 10px; }
+        
+        #game-over { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(8,8,12,0.98);
+            display: none; flex-direction: column; justify-content: center; align-items: center; z-index: 100; padding: 30px; }
+        #game-over.active { display: flex; }
+        #game-over h2 { color: #778; font-size: 22px; margin-bottom: 20px; letter-spacing: 4px; font-weight: normal; }
+        #game-over p { color: #667; max-width: 450px; text-align: center; line-height: 1.9; margin-bottom: 25px; font-size: 13px; }
+        
+        #night-tint { position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: linear-gradient(180deg, rgba(8,8,25,0.15) 0%, rgba(12,10,30,0.25) 100%);
+            pointer-events: none; z-index: 9; opacity: 0; transition: opacity 1s ease; }
+        #night-tint.active { opacity: 1; }
+        
+        #sprinkler-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, rgba(100,150,200,0.15) 0%, rgba(50,100,150,0.25) 100%);
+            pointer-events: none; z-index: 10; opacity: 0; transition: opacity 0.5s ease; }
+        #sprinkler-overlay.active { opacity: 1; animation: sprinklerPulse 0.3s infinite; }
+        @keyframes sprinklerPulse {
+            0%, 100% { background: linear-gradient(180deg, rgba(100,150,200,0.15) 0%, rgba(50,100,150,0.25) 100%); }
+            50% { background: linear-gradient(180deg, rgba(120,170,220,0.2) 0%, rgba(70,120,170,0.3) 100%); }
+        }
+        
+        #fire-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(180deg, rgba(255,100,0,0.3) 0%, rgba(255,50,0,0.5) 100%);
+            pointer-events: none; z-index: 10; opacity: 0; transition: opacity 1s ease; }
+        #fire-overlay.active { opacity: 1; animation: firePulse 0.2s infinite; }
+        @keyframes firePulse {
+            0%, 100% { background: linear-gradient(180deg, rgba(255,100,0,0.3) 0%, rgba(255,50,0,0.5) 100%); }
+            50% { background: linear-gradient(180deg, rgba(255,150,0,0.4) 0%, rgba(255,80,0,0.6) 100%); }
+        }
+        
+        #sanity-effect { position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            pointer-events: none; z-index: 8; opacity: 0; transition: opacity 0.3s;
+            background: radial-gradient(ellipse at center, transparent 30%, rgba(60,20,20,0.3) 100%); }
+
+        #touch-controls { display: none; position: fixed; bottom: 20px; left: 0; right: 0; z-index: 30; padding: 0 10px; }
+        .touch-btn { background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.25); color: rgba(255,255,255,0.8);
+            padding: 14px 20px; font-size: 14px; font-family: monospace; border-radius: 8px; touch-action: manipulation;
+            min-width: 50px; text-align: center; }
+        @media (max-width: 900px), (pointer: coarse) { 
+            #touch-controls { display: block; } 
+            .controls-info { display: none; }
+            #ui { position: fixed; bottom: auto; top: 60px; left: 10px; right: 10px; z-index: 20; }
+            #dialogue-box { max-width: 100%; font-size: 11px; padding: 8px 10px; margin-bottom: 6px; }
+            #dialogue-text { font-size: 11px; line-height: 1.3; }
+            #status-bar { font-size: 9px; padding: 5px 8px; flex-wrap: wrap; }
+            #task-display { font-size: 10px !important; }
+            #interact-prompt { bottom: auto; top: 35%; font-size: 14px; font-weight: bold; }
+            #crosshair { display: none; }
+            #sanity-container { top: 10px; left: 10px; right: auto; width: 120px; }
+            #sanity-container span { font-size: 9px; }
+        }
+        
+        #found-item { position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.95); border: 1px solid #556; padding: 25px 35px; border-radius: 6px;
+            display: none; z-index: 60; text-align: center; max-width: 350px; }
+        #found-item.active { display: block; }
+        #found-item h3 { color: #9a9; font-size: 14px; margin-bottom: 12px; letter-spacing: 2px; }
+        #found-item p { color: #888; font-size: 12px; line-height: 1.7; margin-bottom: 15px; }
+        #found-item button { background: transparent; border: 1px solid #445; color: #667; padding: 8px 20px;
+            font-family: monospace; cursor: pointer; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <canvas id="game-canvas"></canvas>
+    <div id="ps1-overlay"></div>
+    <div id="vignette"></div>
+    <div id="night-tint"></div>
+    <div id="sprinkler-overlay"></div>
+    <div id="fire-overlay"></div>
+    <div id="sanity-effect"></div>
+    <div id="crosshair"></div>
+    
+    <div id="sanity-container">
+        <div id="sanity-label">COMPOSURE</div>
+        <div id="sanity-bar"><div id="sanity-fill"></div></div>
+    </div>
+    
+    <div id="transition">
+        <p id="transition-text">CLOSING TIME</p>
+        <p id="transition-subtext"></p>
+    </div>
+    
+    <div id="found-item">
+        <h3 id="item-title">FOUND ITEM</h3>
+        <p id="item-desc"></p>
+        <button onclick="closeFoundItem()">CONTINUE</button>
+    </div>
+    
+    <div id="title-screen">
+        <h1>LINA'S SHIFT</h1>
+        <p class="subtitle">A RETAIL EXPERIENCE</p>
+        <button id="start-btn">LOCK IN</button>
+        <div class="controls-info">WASD MOVE · MOUSE LOOK · E INTERACT</div>
+    </div>
+    
+    <div id="game-over">
+        <h2 id="gameover-title">SHIFT ENDED</h2>
+        <p id="gameover-text"></p>
+        <button onclick="location.reload()" style="background:transparent;border:1px solid #556;color:#778;padding:12px 28px;font-size:13px;cursor:pointer;font-family:monospace;border-radius:4px;">TRY AGAIN</button>
+    </div>
+    
+    <div id="interact-prompt">[E] INTERACT</div>
+    
+    <div id="touch-controls">
+        <div style="display:flex;justify-content:center;gap:8px;margin-bottom:8px;">
+            <button class="touch-btn" id="touch-left">◄</button>
+            <button class="touch-btn" id="touch-forward">▲</button>
+            <button class="touch-btn" id="touch-backward">▼</button>
+            <button class="touch-btn" id="touch-right">►</button>
+        </div>
+        <div style="display:flex;justify-content:center;gap:10px;">
+            <button class="touch-btn" id="touch-look-left">↺</button>
+            <button class="touch-btn" id="touch-interact" style="padding:14px 30px;">INTERACT</button>
+            <button class="touch-btn" id="touch-look-right">↻</button>
+        </div>
+    </div>
+    
+    <div id="ui">
+        <div id="dialogue-box">
+            <div id="dialogue-speaker"></div>
+            <div id="dialogue-text"></div>
+            <div id="choice-container"></div>
+        </div>
+        <div id="status-bar">
+            <span class="status-item" id="time-display">9:00 AM</span>
+            <span class="status-item" id="day-display">DAY 1</span>
+            <span class="status-item" id="task-display"></span>
+        </div>
+    </div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // ============ AUDIO ============
+        class AudioSystem {
+            constructor() { this.ctx = null; this.initialized = false; this.midiPlaying = false; this.midiTimeout = null; }
+            
+            init() {
+                if (this.initialized) return;
+                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                this.initialized = true;
+                this.master = this.ctx.createGain();
+                this.master.gain.value = 0.4;
+                this.master.connect(this.ctx.destination);
+                this.reverb = this.createReverb();
+                this.reverbGain = this.ctx.createGain();
+                this.reverbGain.gain.value = 0.25;
+                this.reverbGain.connect(this.reverb);
+                this.reverb.connect(this.master);
+                this.dry = this.ctx.createGain();
+                this.dry.gain.value = 0.75;
+                this.dry.connect(this.master);
+            }
+            
+            createReverb() {
+                const convolver = this.ctx.createConvolver();
+                const length = this.ctx.sampleRate * 1.5;
+                const impulse = this.ctx.createBuffer(2, length, this.ctx.sampleRate);
+                for (let c = 0; c < 2; c++) {
+                    const ch = impulse.getChannelData(c);
+                    for (let i = 0; i < length; i++) ch[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / length, 1.8);
+                }
+                convolver.buffer = impulse;
+                return convolver;
+            }
+            
+            startDayMusic() {
+                if (!this.initialized || this.midiPlaying) return;
+                this.midiPlaying = true;
+                this.playMidiLoop();
+            }
+            
+            playMidiLoop() {
+                if (!this.midiPlaying || !this.initialized) return;
+                const chords = [[261.63, 329.63, 392.00], [349.23, 440.00, 523.25], [392.00, 493.88, 587.33], [261.63, 329.63, 392.00]];
+                const melody = [523.25, 587.33, 659.25, 587.33, 523.25, 493.88, 440.00, 493.88];
+                const chordLength = 1.4;
+                let time = this.ctx.currentTime;
+                chords.forEach((chord, ci) => {
+                    chord.forEach(freq => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'triangle'; osc.frequency.value = freq * 0.5;
+                        gain.gain.setValueAtTime(0, time + ci * chordLength);
+                        gain.gain.linearRampToValueAtTime(0.04, time + ci * chordLength + 0.08);
+                        gain.gain.linearRampToValueAtTime(0, time + ci * chordLength + chordLength);
+                        osc.connect(gain); gain.connect(this.reverbGain);
+                        osc.start(time + ci * chordLength); osc.stop(time + ci * chordLength + chordLength + 0.1);
+                    });
+                    for (let i = 0; i < 2; i++) {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'square'; osc.frequency.value = melody[(ci * 2 + i) % melody.length];
+                        const noteTime = time + ci * chordLength + i * (chordLength / 2);
+                        gain.gain.setValueAtTime(0, noteTime);
+                        gain.gain.linearRampToValueAtTime(0.025, noteTime + 0.04);
+                        gain.gain.linearRampToValueAtTime(0, noteTime + 0.3);
+                        osc.connect(gain); gain.connect(this.reverbGain);
+                        osc.start(noteTime); osc.stop(noteTime + 0.35);
+                    }
+                });
+                this.midiTimeout = setTimeout(() => this.playMidiLoop(), chords.length * chordLength * 1000);
+            }
+            
+            stopDayMusic() { this.midiPlaying = false; if (this.midiTimeout) clearTimeout(this.midiTimeout); }
+            
+            startNightAmbience() {
+                if (!this.initialized) return;
+                this.nightDrone = this.ctx.createOscillator();
+                this.nightDrone.type = 'sine'; this.nightDrone.frequency.value = 50 + state.day * 3;
+                this.nightDroneGain = this.ctx.createGain();
+                this.nightDroneGain.gain.setValueAtTime(0, this.ctx.currentTime);
+                this.nightDroneGain.gain.linearRampToValueAtTime(0.06 + state.day * 0.01, this.ctx.currentTime + 2);
+                this.nightDrone.connect(this.nightDroneGain);
+                this.nightDroneGain.connect(this.dry);
+                this.nightDrone.start();
+            }
+            
+            stopNightAmbience() {
+                if (this.nightDrone) {
+                    this.nightDroneGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.5);
+                    setTimeout(() => { try { this.nightDrone.stop(); } catch(e) {} }, 600);
+                }
+            }
+            
+            playFootstep() {
+                if (!this.initialized) return;
+                const basePitch = 60 + Math.random() * 50;
+                const vol = 0.02 + Math.random() * 0.012;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass'; filter.frequency.value = 150 + Math.random() * 50;
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(basePitch, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(basePitch * 0.5, this.ctx.currentTime + 0.08);
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+                osc.connect(filter); filter.connect(gain); gain.connect(this.dry);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.1);
+            }
+            
+            playInteract() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(500, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(700, this.ctx.currentTime + 0.06);
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.1);
+                osc.connect(gain); gain.connect(this.dry);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.1);
+            }
+            
+            playComputer() {
+                if (!this.initialized) return;
+                // Keyboard/click sound
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.04, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.08);
+                osc.connect(gain); gain.connect(this.dry);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.1);
+            }
+            
+            playRegister() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine'; osc.frequency.value = 1800;
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+                osc.connect(gain); gain.connect(this.reverbGain);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.2);
+            }
+            
+            playPhone() {
+                if (!this.initialized) return;
+                let ringCount = 0;
+                const ring = () => {
+                    if (ringCount >= 6 || !state.phoneRinging) return;
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine'; osc.frequency.value = ringCount % 2 === 0 ? 440 : 480;
+                    gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                    gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.12);
+                    osc.connect(gain); gain.connect(this.dry);
+                    osc.start(); osc.stop(this.ctx.currentTime + 0.12);
+                    ringCount++;
+                    setTimeout(ring, 180);
+                };
+                ring();
+            }
+            
+            playDoorLock() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square'; osc.frequency.value = 120;
+                gain.gain.setValueAtTime(0.08, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.04);
+                osc.connect(gain); gain.connect(this.reverbGain);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.04);
+            }
+            
+            playCreepy() {
+                if (!this.initialized) return;
+                const baseFreq = 100 - state.sanity * 0.3;
+                [baseFreq, baseFreq * 1.06, baseFreq * 1.26].forEach((freq, i) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'sine'; osc.frequency.value = freq;
+                    gain.gain.setValueAtTime(0, this.ctx.currentTime + i * 0.15);
+                    gain.gain.linearRampToValueAtTime(0.05, this.ctx.currentTime + i * 0.15 + 0.4);
+                    gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + i * 0.15 + 2);
+                    osc.connect(gain); gain.connect(this.reverbGain);
+                    osc.start(this.ctx.currentTime + i * 0.15);
+                    osc.stop(this.ctx.currentTime + i * 0.15 + 2);
+                });
+            }
+            
+            playBang() {
+                if (!this.initialized) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth'; osc.frequency.value = 50;
+                gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.2);
+                osc.connect(gain); gain.connect(this.reverbGain);
+                osc.start(); osc.stop(this.ctx.currentTime + 0.2);
+            }
+            
+            playWhisper() {
+                if (!this.initialized) return;
+                const bufferSize = this.ctx.sampleRate * 2;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * Math.sin(Math.PI * i / bufferSize) * 0.4;
+                const source = this.ctx.createBufferSource();
+                source.buffer = buffer;
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass'; filter.frequency.value = 1000; filter.Q.value = 3;
+                const gain = this.ctx.createGain();
+                gain.gain.value = 0.1;
+                source.connect(filter); filter.connect(gain); gain.connect(this.reverbGain);
+                source.start();
+            }
+            
+            playHeartbeat() {
+                if (!this.initialized) return;
+                const beat = (delay) => {
+                    setTimeout(() => {
+                        const osc = this.ctx.createOscillator();
+                        const gain = this.ctx.createGain();
+                        osc.type = 'sine'; osc.frequency.value = 40;
+                        gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                        gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.15);
+                        osc.connect(gain); gain.connect(this.dry);
+                        osc.start(); osc.stop(this.ctx.currentTime + 0.15);
+                    }, delay);
+                };
+                beat(0); beat(200);
+            }
+            
+            startSprinklers() {
+                if (!this.initialized || this.sprinklerNode) return;
+                // White noise for sprinkler sound
+                const bufferSize = 2 * this.ctx.sampleRate;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                
+                this.sprinklerNode = this.ctx.createBufferSource();
+                this.sprinklerNode.buffer = noiseBuffer;
+                this.sprinklerNode.loop = true;
+                
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'bandpass';
+                filter.frequency.value = 2000;
+                filter.Q.value = 0.5;
+                
+                this.sprinklerGain = this.ctx.createGain();
+                this.sprinklerGain.gain.setValueAtTime(0, this.ctx.currentTime);
+                this.sprinklerGain.gain.linearRampToValueAtTime(0.15, this.ctx.currentTime + 0.5);
+                
+                this.sprinklerNode.connect(filter);
+                filter.connect(this.sprinklerGain);
+                this.sprinklerGain.connect(this.dry);
+                this.sprinklerNode.start();
+            }
+            
+            stopSprinklers() {
+                if (this.sprinklerNode) {
+                    this.sprinklerGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1);
+                    setTimeout(() => { 
+                        try { this.sprinklerNode.stop(); } catch(e) {} 
+                        this.sprinklerNode = null;
+                    }, 1100);
+                }
+            }
+            
+            playFire() {
+                if (!this.initialized || this.fireNode) return;
+                // Crackling fire sound - filtered noise
+                const bufferSize = 2 * this.ctx.sampleRate;
+                const noiseBuffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const output = noiseBuffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) output[i] = Math.random() * 2 - 1;
+                
+                this.fireNode = this.ctx.createBufferSource();
+                this.fireNode.buffer = noiseBuffer;
+                this.fireNode.loop = true;
+                
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 800;
+                
+                // Add some crackle with a second oscillator
+                this.fireOsc = this.ctx.createOscillator();
+                this.fireOsc.type = 'sawtooth';
+                this.fireOsc.frequency.value = 100;
+                
+                this.fireGain = this.ctx.createGain();
+                this.fireGain.gain.setValueAtTime(0, this.ctx.currentTime);
+                this.fireGain.gain.linearRampToValueAtTime(0.2, this.ctx.currentTime + 1);
+                
+                const oscGain = this.ctx.createGain();
+                oscGain.gain.value = 0.05;
+                
+                this.fireNode.connect(filter);
+                filter.connect(this.fireGain);
+                this.fireOsc.connect(oscGain);
+                oscGain.connect(this.fireGain);
+                this.fireGain.connect(this.dry);
+                
+                this.fireNode.start();
+                this.fireOsc.start();
+            }
+            
+            stopFire() {
+                if (this.fireNode) {
+                    this.fireGain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 1);
+                    setTimeout(() => { 
+                        try { this.fireNode.stop(); this.fireOsc.stop(); } catch(e) {} 
+                        this.fireNode = null;
+                        this.fireOsc = null;
+                    }, 1100);
+                }
+            }
+        }
+        const audio = new AudioSystem();
+
+        // ============ GAME STATE ============
+        const state = {
+            day: 1, hour: 9, minute: 0, isNight: false, gameStarted: false,
+            sanity: 100, maxSanity: 100,
+            doorsLocked: { front: false, back: false }, tillCounted: false,
+            currentCustomer: null, customerWalking: false, customerAtCounter: false,
+            customerLeaving: false, customerServed: false, customersServedToday: 0, customersNeeded: 3,
+            phoneRinging: false, phoneCalls: 0, phoneAnswered: 0, phoneTotal: 0, // Track answered vs total
+            computerTask: null, wifiDown: false,
+            pendingCall: null, // 'anna', 'customer', 'weird'
+            interactTarget: null, annaTask: null, annaOnBreak: false,
+            nightEventTimer: 0, nightTaskTimer: 0, mannequinsMoved: 0,
+            nightEventTriggered: false, // Track if special night event happened
+            sprinklersTriggered: false, // Track sprinklers for night 3
+            readyToLogout: false, // Final step to end night
+            escapeActive: false, // Good ending escape sequence
+            trapActive: false, // Bad ending trap sequence
+            // Story items found
+            foundItems: [],
+            // Choices made
+            answeredCreepyCall: false, investigatedBang: false, lookedAtPhoto: false,
+            // ViVi relationship
+            viviTrust: 50, // 0-100, affects endings
+            viviWarnings: 0,
+            // Night closing timer (pressure!)
+            closingTimeLeft: 0, closingTimerActive: false,
+            // Previous employee story
+            learnedAboutMaya: false, foundMayaNote: false, foundMayaBadge: false, foundPhoto: false,
+            metMaya: false, // Met Maya on night 4
+            // Ending flags
+            ending: null
+        };
+        
+        // Story items that can be found
+        const storyItems = {
+            mayaNote: {
+                title: "CRUMPLED NOTE",
+                desc: "Found behind the counter. Handwritten: 'They move when you're not looking. I'm not crazy. I KNOW what I saw. Night 5 is when it happens. Don't stay. -M'",
+                found: false
+            },
+            mayaBadge: {
+                title: "OLD EMPLOYEE BADGE",
+                desc: "A faded employee badge. Photo of a young woman with dark hair. Name: 'Maya Chen'. The plastic is warped, like it was exposed to heat.",
+                found: false
+            },
+            burnedPhoto: {
+                title: "BURNED PHOTOGRAPH",
+                desc: "A partially burned photo showing the store interior... but different. The mannequins are arranged in a circle. One appears to be looking at the camera.",
+                found: false
+            },
+            newspaper: {
+                title: "OLD NEWSPAPER CLIPPING",
+                desc: "'LOCAL STORE FIRE CLAIMS ONE' - A fire broke out at The Pull of Bear on the night of... (rest is burned). 'Employee Maya Chen, 24, was found...' (illegible)",
+                found: false
+            }
+        };
+        
+        const colliders = [];
+
+        // ============ THREE.JS SETUP ============
+        const canvas = document.getElementById('game-canvas');
+        const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 0.7));
+
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x1a1a22);
+        scene.fog = new THREE.FogExp2(0x1a1a22, 0.018);
+
+        const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 100);
+        camera.position.set(0, 1.6, 18);
+        camera.rotation.order = 'YXZ';
+        
+        // Camera look angles
+        let cameraYaw = Math.PI; // Face into store
+        let cameraPitch = 0;
+
+        const ambientLight = new THREE.AmbientLight(0x606070, 0.5);
+        scene.add(ambientLight);
+
+        const lights = [];
+        for (let x = -10; x <= 10; x += 5) {
+            for (let z = -15; z <= 20; z += 8) {
+                const light = new THREE.PointLight(0xfffaf0, 0.65, 14);
+                light.position.set(x, 3.8, z);
+                scene.add(light);
+                lights.push(light);
+                const fixture = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.06, 1.5), new THREE.MeshBasicMaterial({ color: 0xfffff8 }));
+                fixture.position.set(x, 3.95, z);
+                scene.add(fixture);
+            }
+        }
+
+        function createMaterial(color) { return new THREE.MeshLambertMaterial({ color, flatShading: true }); }
+        function addCollider(x, z, w, d) { colliders.push({ minX: x - w/2, maxX: x + w/2, minZ: z - d/2, maxZ: z + d/2 }); }
+
+        // Floor, ceiling, walls
+        const floor = new THREE.Mesh(new THREE.PlaneGeometry(35, 50), createMaterial(0x3a3a42));
+        floor.rotation.x = -Math.PI / 2;
+        scene.add(floor);
+        
+        const grid = new THREE.GridHelper(35, 35, 0x2a2a32, 0x2a2a32);
+        grid.position.y = 0.01;
+        scene.add(grid);
+        
+        const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(35, 50), createMaterial(0x2a2a32));
+        ceiling.rotation.x = Math.PI / 2; ceiling.position.y = 4;
+        scene.add(ceiling);
+
+        const wallMat = createMaterial(0x4a4a52);
+        let frontWall = null;
+        [[0, 24, Math.PI, 35], [0, -24, 0, 35], [-17.5, 0, Math.PI/2, 50], [17.5, 0, -Math.PI/2, 50]].forEach(([x, z, r, w], i) => {
+            const wall = new THREE.Mesh(new THREE.PlaneGeometry(w, 4), wallMat);
+            wall.position.set(x, 2, z); wall.rotation.y = r;
+            scene.add(wall);
+            if (i === 1) frontWall = wall; // Track the front wall (z=-24)
+        });
+
+        // ============ CORPORATE ART ON BACK WALL ============
+        function createCorpArt(x, z, title, subtitle) {
+            const group = new THREE.Group();
+            
+            // Frame
+            const frame = new THREE.Mesh(
+                new THREE.BoxGeometry(2.4, 1.6, 0.05),
+                createMaterial(0x3a3a3a)
+            );
+            group.add(frame);
+            
+            // Canvas background - muted corporate colors
+            const canvas = document.createElement('canvas');
+            canvas.width = 480;
+            canvas.height = 320;
+            const ctx = canvas.getContext('2d');
+            
+            // Gradient background
+            const grad = ctx.createLinearGradient(0, 0, 480, 320);
+            grad.addColorStop(0, '#e8e4df');
+            grad.addColorStop(1, '#d4d0cb');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, 480, 320);
+            
+            // Abstract corporate shapes
+            ctx.globalAlpha = 0.15;
+            ctx.fillStyle = '#7a9bb8';
+            ctx.beginPath();
+            ctx.arc(120, 160, 80, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#b89a7a';
+            ctx.beginPath();
+            ctx.arc(360, 140, 100, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.fillStyle = '#8ab87a';
+            ctx.beginPath();
+            ctx.arc(240, 220, 60, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Overlapping soft rectangles
+            ctx.globalAlpha = 0.1;
+            ctx.fillStyle = '#5a6a7a';
+            ctx.fillRect(50, 80, 180, 120);
+            ctx.fillRect(250, 120, 160, 140);
+            
+            ctx.globalAlpha = 1;
+            
+            // Title text
+            ctx.fillStyle = '#4a4a4a';
+            ctx.font = 'bold 36px Georgia, serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(title, 240, 140);
+            
+            // Subtitle
+            ctx.font = '18px Arial, sans-serif';
+            ctx.fillStyle = '#6a6a6a';
+            ctx.fillText(subtitle, 240, 180);
+            
+            // Small corporate logo placeholder
+            ctx.font = '12px Arial';
+            ctx.fillStyle = '#888';
+            ctx.fillText('HARTLEY\'S', 240, 290);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const artMesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(2.2, 1.4),
+                new THREE.MeshBasicMaterial({ map: texture })
+            );
+            artMesh.position.z = 0.03;
+            group.add(artMesh);
+            
+            group.position.set(x, 2.5, z);
+            group.rotation.y = Math.PI; // Face into the store
+            return group;
+        }
+        
+        // Add corporate art pieces to back wall (z=24, facing -z)
+        scene.add(createCorpArt(-5, 23.9, 'The Pull of Bear', 'Embrace the Journey'));
+        scene.add(createCorpArt(5, 23.9, 'Bear With Us', 'Quality Takes Time'));
+
+        // ============ COUNTER AREA ============
+        const counterGroup = new THREE.Group();
+        
+        // Main counter
+        const counterMain = new THREE.Mesh(new THREE.BoxGeometry(10, 1, 1.5), createMaterial(0x5a5a62));
+        counterMain.position.set(0, 0.5, 15);
+        counterGroup.add(counterMain);
+        addCollider(0, 15, 10, 1.5);
+        
+        const counterTop = new THREE.Mesh(new THREE.BoxGeometry(10.2, 0.08, 1.7), createMaterial(0x6a6a72));
+        counterTop.position.set(0, 1.04, 15);
+        counterGroup.add(counterTop);
+        
+        // Side counter
+        const counterSide = new THREE.Mesh(new THREE.BoxGeometry(1.5, 1, 5), createMaterial(0x5a5a62));
+        counterSide.position.set(-5.5, 0.5, 18);
+        counterGroup.add(counterSide);
+        addCollider(-5.5, 18, 1.5, 5);
+        
+        // Till/Register
+        const register = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.3, 0.4), createMaterial(0x2a2a32));
+        register.position.set(-2, 1.2, 15.3);
+        register.userData = { type: 'till' };
+        counterGroup.add(register);
+        const regScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.18), new THREE.MeshBasicMaterial({ color: 0x003300 }));
+        regScreen.position.set(-2, 1.32, 15.52);
+        counterGroup.add(regScreen);
+        
+        // Computer
+        const computer = new THREE.Group();
+        computer.userData = { type: 'computer' };
+        const monitor = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.4, 0.05), createMaterial(0x2a2a32));
+        monitor.position.y = 0.25;
+        computer.add(monitor);
+        const monScreen = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.32), new THREE.MeshBasicMaterial({ color: 0x001a33 }));
+        monScreen.position.set(0, 0.25, 0.03);
+        computer.add(monScreen);
+        const monStand = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.12, 0.08), createMaterial(0x2a2a32));
+        monStand.position.y = 0.01;
+        computer.add(monStand);
+        const keyboard = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.02, 0.12), createMaterial(0x3a3a42));
+        keyboard.position.set(0, 0, 0.22);
+        computer.add(keyboard);
+        computer.position.set(1, 1.08, 15.4);
+        counterGroup.add(computer);
+        
+        // Phone
+        const phone = new THREE.Group();
+        phone.userData = { type: 'phone' };
+        const phoneBase = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.25), createMaterial(0x2a2a2a));
+        phone.add(phoneBase);
+        const phoneHandset = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.04, 0.22), createMaterial(0x1a1a1a));
+        phoneHandset.position.y = 0.05;
+        phone.add(phoneHandset);
+        phone.position.set(3, 1.08, 15.5);
+        counterGroup.add(phone);
+        
+        // Router (on counter, visible)
+        const router = new THREE.Group();
+        router.userData = { type: 'router' };
+        const routerBox = new THREE.Mesh(new THREE.BoxGeometry(0.25, 0.06, 0.18), createMaterial(0x1a1a1a));
+        router.add(routerBox);
+        const routerLight = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.025, 0.025), new THREE.MeshBasicMaterial({ color: 0x00ff00 }));
+        routerLight.position.set(0, 0.04, 0.08);
+        routerLight.userData.isRouterLight = true;
+        router.add(routerLight);
+        router.position.set(-4.5, 1.08, 17); // On top of counter
+        counterGroup.add(router);
+        
+        // Hidden story item - Maya's note (behind counter)
+        const hiddenNote = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.01, 0.1), createMaterial(0xddd8c8));
+        hiddenNote.position.set(-3.5, 1.06, 16.8);
+        hiddenNote.userData = { type: 'storyItem', item: 'mayaNote' };
+        counterGroup.add(hiddenNote);
+        
+        scene.add(counterGroup);
+        
+        // ============ CUSTOMER ITEM ON COUNTER ============
+        let customerItem = null;
+        function showCustomerItem() {
+            if (customerItem) scene.remove(customerItem);
+            const colors = [0x4a3a3a, 0x3a4a4a, 0x3a3a4a, 0x4a4a3a];
+            customerItem = new THREE.Mesh(
+                new THREE.BoxGeometry(0.3, 0.15, 0.25),
+                createMaterial(colors[Math.floor(Math.random() * colors.length)])
+            );
+            customerItem.position.set(-0.5 + Math.random(), 1.12, 14.5);
+            scene.add(customerItem);
+        }
+        function hideCustomerItem() {
+            if (customerItem) { scene.remove(customerItem); customerItem = null; }
+        }
+
+        // ============ TABLES (folding tables for displays) ============
+        function createTable(x, z) {
+            const group = new THREE.Group();
+            const top = new THREE.Mesh(new THREE.BoxGeometry(1.8, 0.06, 1), createMaterial(0x5a5a5a));
+            top.position.y = 0.75;
+            group.add(top);
+            // Legs
+            [[-0.8, -0.4], [-0.8, 0.4], [0.8, -0.4], [0.8, 0.4]].forEach(([lx, lz]) => {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.75, 0.05), createMaterial(0x444444));
+                leg.position.set(lx, 0.375, lz);
+                group.add(leg);
+            });
+            // Items on table
+            for (let i = 0; i < 3 + Math.floor(Math.random() * 3); i++) {
+                const item = new THREE.Mesh(
+                    new THREE.BoxGeometry(0.2 + Math.random() * 0.15, 0.1 + Math.random() * 0.1, 0.15 + Math.random() * 0.1),
+                    createMaterial([0x8B4513, 0x2F4F4F, 0x4a4a5a, 0x5a4a4a][Math.floor(Math.random() * 4)])
+                );
+                item.position.set(-0.5 + Math.random() * 1, 0.85, -0.3 + Math.random() * 0.6);
+                group.add(item);
+            }
+            group.position.set(x, 0, z);
+            addCollider(x, z, 2, 1.2);
+            return group;
+        }
+        
+        // Place tables
+        [{ x: -6, z: 2 }, { x: 6, z: 2 }, { x: -6, z: -8 }, { x: 6, z: -8 }, { x: 0, z: -16 }].forEach(p => {
+            scene.add(createTable(p.x, p.z));
+        });
+
+        // ============ CLOTHING RACKS ============
+        function createRack(x, z, rot = 0) {
+            const group = new THREE.Group();
+            const metal = createMaterial(0x888888);
+            const base = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.04, 0.5), metal);
+            base.position.y = 0.02;
+            group.add(base);
+            [-.5, .5].forEach(px => {
+                const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 1.4), metal);
+                pole.position.set(px, 0.72, 0);
+                group.add(pole);
+            });
+            const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 1.2), metal);
+            bar.rotation.z = Math.PI / 2; bar.position.y = 1.38;
+            group.add(bar);
+            const colors = [0x8B4513, 0x2F4F4F, 0x800020, 0x1a1a2e, 0x4a4a5a];
+            for (let i = 0; i < 7; i++) {
+                const cloth = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.5, 0.02), createMaterial(colors[Math.floor(Math.random() * colors.length)]));
+                cloth.position.set(-0.4 + i * 0.12, 1.1, 0);
+                group.add(cloth);
+            }
+            group.position.set(x, 0, z);
+            group.rotation.y = rot;
+            if (rot === 0) addCollider(x, z, 1.4, 0.7);
+            else addCollider(x, z, 0.7, 1.4);
+            return group;
+        }
+
+        const clothingRacks = [];
+        [
+            { x: -12, z: -14 }, { x: -12, z: -4 }, { x: -12, z: 6 },
+            { x: 12, z: -14 }, { x: 12, z: -4 }, { x: 12, z: 6 },
+            { x: -3, z: -20, r: Math.PI/2 }, { x: 3, z: -20, r: Math.PI/2 },
+        ].forEach(p => {
+            const rack = createRack(p.x, p.z, p.r || 0);
+            scene.add(rack);
+            clothingRacks.push(rack);
+        });
+
+        // ============ DOORS ============
+        const doors = [];
+        function createDoor(x, z, rotY, name) {
+            const group = new THREE.Group();
+            group.userData = { type: 'door', name, locked: false };
+            group.add(new THREE.Mesh(new THREE.BoxGeometry(1.4, 2.5, 0.15), createMaterial(0x3a3a42))).position.y = 1.25;
+            const door = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.3, 0.08), createMaterial(0x5a5a62));
+            door.position.set(0, 1.15, 0.05);
+            group.add(door);
+            // Window
+            const window = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.7), new THREE.MeshBasicMaterial({ color: 0x111118, transparent: true, opacity: 0.8 }));
+            window.position.set(0, 1.5, 0.1);
+            group.add(window);
+            const lock = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.08, 0.03), new THREE.MeshBasicMaterial({ color: 0x444444 }));
+            lock.position.set(0.4, 1.25, 0.12);
+            lock.userData.isLockIndicator = true;
+            group.add(lock);
+            group.position.set(x, 0, z);
+            group.rotation.y = rotY;
+            return group;
+        }
+        
+        const frontDoor = createDoor(0, -23.9, 0, 'front');
+        scene.add(frontDoor); doors.push(frontDoor);
+        const backDoor = createDoor(-17.4, 20, Math.PI/2, 'back');
+        scene.add(backDoor); doors.push(backDoor);
+
+        // ============ MANNEQUINS ============
+        const mannequins = [];
+        const mannequinData = [];
+        
+        function createMannequin(x, z, hasItem = false) {
+            const group = new THREE.Group();
+            group.userData = { type: 'mannequin', originalX: x, originalZ: z };
+            const mat = createMaterial(0xddddd0);
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.65, 0.2), mat);
+            body.position.y = 1.1;
+            group.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mat);
+            head.position.y = 1.62;
+            group.add(head);
+            
+            // Face - simple line features using thin boxes
+            const faceMat = new THREE.MeshBasicMaterial({ color: 0x222222 });
+            // Eyes - two horizontal lines
+            const eyeGeo = new THREE.BoxGeometry(0.025, 0.006, 0.005);
+            const leftEye = new THREE.Mesh(eyeGeo, faceMat);
+            leftEye.position.set(-0.035, 1.64, 0.115);
+            group.add(leftEye);
+            const rightEye = new THREE.Mesh(eyeGeo, faceMat);
+            rightEye.position.set(0.035, 1.64, 0.115);
+            group.add(rightEye);
+            // Mouth - single horizontal line
+            const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.005, 0.005), faceMat);
+            mouth.position.set(0, 1.55, 0.115);
+            group.add(mouth);
+            
+            // Legs
+            [-.08, .08].forEach(lx => {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), mat);
+                leg.position.set(lx, 0.35, 0);
+                group.add(leg);
+            });
+            // Arms
+            [-.22, .22].forEach((ax, i) => {
+                const arm = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.5, 0.08), mat);
+                arm.position.set(ax, 1.0, 0);
+                arm.rotation.z = i === 0 ? 0.1 : -0.1;
+                group.add(arm);
+            });
+            // Hidden item on certain mannequins
+            if (hasItem) {
+                const badge = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.08, 0.01), createMaterial(0xddddaa));
+                badge.position.set(0.12, 1.3, 0.12);
+                badge.userData = { type: 'storyItem', item: 'mayaBadge' };
+                group.add(badge);
+            }
+            group.position.set(x, 0, z);
+            return group;
+        }
+        
+        const mannequinPositions = [
+            { x: -5, z: -18, hasItem: false },
+            { x: 5, z: -18, hasItem: true }, // Has Maya's badge
+            { x: -14, z: 0, hasItem: false },
+            { x: 14, z: 0, hasItem: false },
+            { x: 0, z: -10, hasItem: false },
+            { x: -9, z: 10, hasItem: false },
+            { x: 9, z: 10, hasItem: false },
+        ];
+        
+        mannequinPositions.forEach(p => {
+            const m = createMannequin(p.x, p.z, p.hasItem);
+            scene.add(m);
+            mannequins.push(m);
+            mannequinData.push({ x: p.x, z: p.z, moved: false });
+            addCollider(p.x, p.z, 0.5, 0.5);
+        });
+        
+        // ============ STOCKROOM DOOR (where bang comes from) ============
+        const stockroomDoor = new THREE.Mesh(new THREE.BoxGeometry(1.2, 2.3, 0.1), createMaterial(0x4a4a52));
+        stockroomDoor.position.set(-17.4, 1.15, 0);
+        stockroomDoor.rotation.y = Math.PI / 2;
+        stockroomDoor.userData = { type: 'stockroom' };
+        scene.add(stockroomDoor);
+        
+        // ============ ESCAPE DOOR (only visible during ending sequences) ============
+        // Using a simple Mesh for reliable raycasting
+        const escapeDoorMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1.4, 2.5, 0.2),
+            new THREE.MeshBasicMaterial({ color: 0xff0000 }) // Bright red, always visible
+        );
+        escapeDoorMesh.position.set(-17.3, -100, 5); // Start hidden underground
+        escapeDoorMesh.rotation.y = Math.PI / 2;
+        escapeDoorMesh.userData = { type: 'escapeDoor' };
+        scene.add(escapeDoorMesh);
+        
+        // Light for escape door (also hidden initially)
+        const escapeDoorLight = new THREE.PointLight(0xff4444, 2, 15);
+        escapeDoorLight.position.set(-16, 2, 5);
+        escapeDoorLight.visible = false;
+        scene.add(escapeDoorLight);
+        
+        function showEscapeDoor() {
+            escapeDoorMesh.position.y = 1.25; // Bring to proper height
+            escapeDoorLight.visible = true;
+            audio.playBang(); // Audio cue
+            console.log('ESCAPE DOOR NOW VISIBLE at', escapeDoorMesh.position);
+        }
+        
+        function hideEscapeDoor() {
+            escapeDoorMesh.position.y = -100;
+            escapeDoorLight.visible = false;
+        }
+        
+        // Story item near stockroom
+        const burntPhoto = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.01, 0.08), createMaterial(0x333330));
+        burntPhoto.position.set(-16, 0.02, -2);
+        burntPhoto.userData = { type: 'storyItem', item: 'burnedPhoto' };
+        scene.add(burntPhoto);
+        
+        // Newspaper in corner
+        const newspaper = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.01, 0.15), createMaterial(0xddd8c0));
+        newspaper.position.set(16, 0.02, -20);
+        newspaper.userData = { type: 'storyItem', item: 'newspaper' };
+        scene.add(newspaper);
+
+        // ============ CUSTOMER ============
+        let customerMesh = null;
+        let customerTargetPos = new THREE.Vector3();
+        
+        function createCustomer() {
+            const group = new THREE.Group();
+            group.userData = { type: 'customer' };
+            const skinTones = [0xe8beac, 0xd4a574, 0x8d6e4c, 0xf5d0c5];
+            const skin = createMaterial(skinTones[Math.floor(Math.random() * skinTones.length)]);
+            const clothColors = [0x2a3a4a, 0x4a3a3a, 0x3a4a3a, 0x3a3a4a, 0x4a4a3a];
+            const cloth = createMaterial(clothColors[Math.floor(Math.random() * clothColors.length)]);
+            
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.75, 0.25), cloth);
+            body.position.y = 1.1;
+            group.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), skin);
+            head.position.y = 1.68;
+            group.add(head);
+            [-.04, .04].forEach(ex => {
+                const eye = new THREE.Mesh(new THREE.CircleGeometry(0.02, 6), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+                eye.position.set(ex, 1.7, 0.13);
+                group.add(eye);
+            });
+            [-.1, .1].forEach(lx => {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.7, 0.12), createMaterial(0x1a1a22));
+                leg.position.set(lx, 0.35, 0);
+                group.add(leg);
+            });
+            [-.26, .26].forEach(ax => {
+                const arm = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.5, 0.1), cloth);
+                arm.position.set(ax, 1.0, 0);
+                group.add(arm);
+            });
+            return group;
+        }
+        
+        function spawnCustomer() {
+            if (customerMesh || state.isNight) return;
+            customerMesh = createCustomer();
+            customerMesh.position.set(-2 + Math.random() * 4, 0, -22);
+            customerTargetPos.set(-0.5 + Math.random(), 0, 13.5);
+            scene.add(customerMesh);
+            state.customerWalking = true;
+            state.customerAtCounter = false;
+            state.customerLeaving = false;
+            state.customerServed = false;
+            
+            // Higher creepy chance as days progress
+            const creepyChance = 0.08 + state.day * 0.06;
+            state.currentCustomer = { 
+                creepy: Math.random() < creepyChance,
+                knowsMaya: state.day >= 3 && Math.random() < 0.3
+            };
+        }
+        
+        function updateCustomer(delta) {
+            if (!customerMesh) return;
+            if (state.customerWalking) {
+                const dir = new THREE.Vector3().subVectors(customerTargetPos, customerMesh.position);
+                const dist = dir.length();
+                if (dist > 0.3) {
+                    dir.normalize();
+                    customerMesh.position.x += dir.x * 3.5 * delta;
+                    customerMesh.position.z += dir.z * 3.5 * delta;
+                    customerMesh.rotation.y = Math.atan2(dir.x, dir.z);
+                    customerMesh.position.y = Math.sin(Date.now() * 0.01) * 0.012;
+                } else {
+                    state.customerWalking = false;
+                    if (state.customerLeaving) {
+                        scene.remove(customerMesh);
+                        customerMesh = null;
+                        state.currentCustomer = null;
+                        hideCustomerItem();
+                    } else {
+                        state.customerAtCounter = true;
+                        customerMesh.position.y = 0;
+                        customerMesh.rotation.y = Math.PI;
+                        showCustomerItem();
+                        showDialogue('', 'Customer at the counter.');
+                    }
+                }
+            } else if (state.customerAtCounter) {
+                const toPlayer = new THREE.Vector3(camera.position.x - customerMesh.position.x, 0, camera.position.z - customerMesh.position.z);
+                customerMesh.rotation.y = Math.atan2(toPlayer.x, toPlayer.z);
+            }
+        }
+        
+        function makeCustomerLeave() {
+            if (!customerMesh) return;
+            state.customerAtCounter = false;
+            state.customerLeaving = true;
+            state.customerWalking = true;
+            customerTargetPos.set(-2 + Math.random() * 4, 0, -24);
+        }
+
+        // ============ PLAYER ============
+        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
+        let isPointerLocked = false;
+        let touchLookLeft = false, touchLookRight = false, touchMoveForward = false, touchMoveBackward = false, touchMoveLeft = false, touchMoveRight = false;
+        let playerSpeed = 0;
+
+        document.addEventListener('keydown', (e) => {
+            if (!state.gameStarted) return;
+            switch (e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = true; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = true; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = true; break;
+                case 'KeyD': case 'ArrowRight': moveRight = true; break;
+                case 'KeyE': case 'Space': handleInteraction(); break;
+                // DEV SKIP - Press P to skip to next cycle
+                case 'KeyP': devSkipCycle(); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch (e.code) {
+                case 'KeyW': case 'ArrowUp': moveForward = false; break;
+                case 'KeyS': case 'ArrowDown': moveBackward = false; break;
+                case 'KeyA': case 'ArrowLeft': moveLeft = false; break;
+                case 'KeyD': case 'ArrowRight': moveRight = false; break;
+            }
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (!isPointerLocked || !state.gameStarted) return;
+            cameraYaw -= e.movementX * 0.002;
+            cameraPitch -= e.movementY * 0.002;
+            cameraPitch = Math.max(-1.4, Math.min(1.4, cameraPitch));
+        });
+        document.addEventListener('pointerlockchange', () => { isPointerLocked = document.pointerLockElement === canvas; });
+        canvas.addEventListener('click', () => { if (state.gameStarted && !isPointerLocked) canvas.requestPointerLock(); });
+
+        function setupTouch(id, onStart, onEnd) {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); onStart(); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); onEnd(); });
+        }
+        setupTouch('touch-forward', () => touchMoveForward = true, () => touchMoveForward = false);
+        setupTouch('touch-backward', () => touchMoveBackward = true, () => touchMoveBackward = false);
+        setupTouch('touch-left', () => touchMoveLeft = true, () => touchMoveLeft = false);
+        setupTouch('touch-right', () => touchMoveRight = true, () => touchMoveRight = false);
+        setupTouch('touch-look-left', () => touchLookLeft = true, () => touchLookLeft = false);
+        setupTouch('touch-look-right', () => touchLookRight = true, () => touchLookRight = false);
+        document.getElementById('touch-interact')?.addEventListener('click', handleInteraction);
+
+        let footstepTimer = 0, headBob = 0;
+        const playerRadius = 0.35;
+
+        function checkCollision(x, z) {
+            for (const c of colliders) {
+                if (x + playerRadius > c.minX && x - playerRadius < c.maxX && z + playerRadius > c.minZ && z - playerRadius < c.maxZ) return true;
+            }
+            return false;
+        }
+
+        function updatePlayer(delta) {
+            if (!state.gameStarted) return;
+            
+            // Apply camera rotation
+            camera.rotation.y = cameraYaw;
+            camera.rotation.x = cameraPitch;
+            
+            // Touch look
+            if (touchLookLeft) cameraYaw += 2.5 * delta;
+            if (touchLookRight) cameraYaw -= 2.5 * delta;
+            
+            const fwd = moveForward || touchMoveForward;
+            const back = moveBackward || touchMoveBackward;
+            const left = moveLeft || touchMoveLeft;
+            const right = moveRight || touchMoveRight;
+            
+            // Acceleration
+            const maxSpeed = 10;
+            const accel = 30;
+            const friction = 18;
+            const moving = fwd || back || left || right;
+            
+            if (moving) {
+                playerSpeed = Math.min(maxSpeed, playerSpeed + accel * delta);
+            } else {
+                playerSpeed = Math.max(0, playerSpeed - friction * delta);
+            }
+            
+            // Direction from yaw only (not pitch)
+            const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
+            const rightVec = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), cameraYaw);
+            
+            const moveDir = new THREE.Vector3();
+            if (fwd) moveDir.add(forward);
+            if (back) moveDir.sub(forward);
+            if (right) moveDir.add(rightVec);
+            if (left) moveDir.sub(rightVec);
+            if (moveDir.length() > 0) moveDir.normalize();
+
+            const moveX = moveDir.x * playerSpeed * delta;
+            const moveZ = moveDir.z * playerSpeed * delta;
+
+            let newX = camera.position.x + moveX;
+            if (newX < -16.5 || newX > 16.5 || checkCollision(newX, camera.position.z)) newX = camera.position.x;
+            let newZ = camera.position.z + moveZ;
+            if (newZ < -22 || newZ > 23 || checkCollision(newX, newZ)) newZ = camera.position.z;
+            camera.position.x = newX;
+            camera.position.z = newZ;
+
+            // Footsteps and head bob
+            if (playerSpeed > 1) {
+                headBob += delta * 12;
+                camera.position.y = 1.6 + Math.sin(headBob) * 0.018;
+                footstepTimer += delta * (playerSpeed / 4);
+                if (footstepTimer > 0.3) { audio.playFootstep(); footstepTimer = 0; }
+            } else {
+                camera.position.y += (1.6 - camera.position.y) * 0.15;
+            }
+        }
+        
+        // ============ SANITY SYSTEM ============
+        function modifySanity(amount) {
+            state.sanity = Math.max(0, Math.min(state.maxSanity, state.sanity + amount));
+            document.getElementById('sanity-fill').style.width = state.sanity + '%';
+            
+            // Visual effects based on sanity
+            const effect = document.getElementById('sanity-effect');
+            if (state.sanity < 30) {
+                effect.style.opacity = (30 - state.sanity) / 60;
+                if (state.sanity < 20 && Math.random() > 0.95) {
+                    audio.playHeartbeat();
+                }
+            } else {
+                effect.style.opacity = 0;
+            }
+            
+            // Game over if sanity hits 0
+            if (state.sanity <= 0) {
+                triggerBadEnding('sanity');
+            }
+        }
+        
+        function updateSanityDisplay() {
+            document.getElementById('sanity-fill').style.width = state.sanity + '%';
+        }
+
+        // ============ DIALOGUE SYSTEM ============
+        const dialogueBox = document.getElementById('dialogue-box');
+        const dialogueSpeaker = document.getElementById('dialogue-speaker');
+        const dialogueText = document.getElementById('dialogue-text');
+        let dialogueTimeout = null;
+        let dialogueQueue = [];
+        let dialogueCallback = null;
+
+        function showDialogue(speaker, text, style = '') {
+            if (dialogueTimeout) clearTimeout(dialogueTimeout);
+            dialogueSpeaker.textContent = speaker;
+            dialogueText.textContent = text;
+            dialogueText.className = style || '';
+            dialogueBox.classList.add('active');
+            dialogueTimeout = setTimeout(() => dialogueBox.classList.remove('active'), 3500);
+        }
+
+        function playDialogueSequence(lines, callback = null) {
+            dialogueQueue = [...lines];
+            dialogueCallback = callback;
+            playNextLine();
+        }
+
+        function playNextLine() {
+            if (dialogueQueue.length === 0) {
+                if (dialogueCallback) {
+                    dialogueCallback();
+                    dialogueCallback = null;
+                }
+                return;
+            }
+            const line = dialogueQueue.shift();
+            const style = line.creepy ? 'creepy' : (line.internal ? 'internal' : '');
+            showDialogue(line.s, line.t, style);
+            const duration = Math.max(2000, line.t.length * 60);
+            setTimeout(playNextLine, duration);
+        }
+
+        // ============ INTERACTION ============
+        const raycaster = new THREE.Raycaster();
+        const interactPrompt = document.getElementById('interact-prompt');
+
+        function checkInteractables() {
+            const interactables = [...doors, register, computer, phone, router, stockroomDoor, escapeDoorMesh, hiddenNote, burntPhoto, newspaper];
+            mannequins.forEach(m => m.traverse(c => { if (c.userData.type === 'storyItem') interactables.push(c); }));
+            if (customerMesh && state.customerAtCounter && !state.customerServed) interactables.push(customerMesh);
+            
+            const objects = interactables.flatMap(obj => obj.children ? [obj, ...obj.children] : [obj]);
+            
+            state.interactTarget = null;
+            interactPrompt.classList.remove('active');
+            
+            // Cast multiple rays vertically to catch objects at different heights
+            const rayOffsets = [0.4, 0.2, 0, -0.2, -0.4, -0.6];
+            
+            for (const yOffset of rayOffsets) {
+                raycaster.setFromCamera(new THREE.Vector2(0, yOffset), camera);
+                const intersects = raycaster.intersectObjects(objects, true);
+                
+                for (const hit of intersects) {
+                    if (hit.distance < 4) {
+                        let target = hit.object;
+                        while (target.parent && !target.userData.type) target = target.parent;
+                        if (target.userData.type) {
+                            if (target.userData.type === 'storyItem' && storyItems[target.userData.item]?.found) continue;
+                            
+                            state.interactTarget = target;
+                            let prompt = '[E] ';
+                            switch (target.userData.type) {
+                                case 'door': prompt += state.isNight ? (target.userData.locked ? '✓' : 'LOCK') : 'DOOR'; break;
+                                case 'till': prompt += state.isNight && !state.tillCounted ? 'COUNT' : 'REGISTER'; break;
+                                case 'customer': prompt += 'SERVE'; break;
+                                case 'phone': prompt += state.phoneRinging ? 'ANSWER' : 'PHONE'; break;
+                                case 'computer': prompt += state.readyToLogout ? 'LOG OUT' : (state.computerTask || state.annaTask ? 'USE' : 'COMPUTER'); break;
+                                case 'router': prompt += state.wifiDown ? 'RESET' : 'ROUTER'; break;
+                                case 'stockroom': prompt += (state.escapeActive || state.trapActive) ? 'ENTER' : 'STOCKROOM'; break;
+                                case 'escapeDoor': prompt += 'EXIT'; break;
+                                case 'storyItem': prompt += 'EXAMINE'; break;
+                            }
+                            interactPrompt.textContent = prompt;
+                            interactPrompt.classList.add('active');
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        function handleInteraction() {
+            // If found-item overlay is open, close it
+            if (document.getElementById('found-item').classList.contains('active')) {
+                closeFoundItem();
+                return;
+            }
+            
+            // If customer at counter, serve them directly
+            if (customerMesh && state.customerAtCounter && !state.customerServed) {
+                handleCustomerInteraction();
+                return;
+            }
+            
+            if (!state.interactTarget) return;
+            const target = state.interactTarget;
+            switch (target.userData.type) {
+                case 'door': handleDoor(target); break;
+                case 'till': handleTill(); break;
+                case 'customer': handleCustomerInteraction(); break;
+                case 'phone': handlePhone(); break;
+                case 'computer': handleComputer(); break;
+                case 'router': handleRouter(); break;
+                case 'stockroom': handleStockroom(); break;
+                case 'escapeDoor': handleEscapeDoorInteract(); break;
+                case 'storyItem': handleStoryItem(target.userData.item); break;
+            }
+        }
+        
+        function handleDoor(target) {
+            if (!state.isNight) {
+                showDialogue('', "Store's open.");
+            } else if (!target.userData.locked) {
+                audio.playDoorLock();
+                target.userData.locked = true;
+                state.doorsLocked[target.userData.name] = true;
+                target.traverse(c => { if (c.userData.isLockIndicator) c.material = new THREE.MeshBasicMaterial({ color: 0x228822 }); });
+                showDialogue('', target.userData.name.charAt(0).toUpperCase() + target.userData.name.slice(1) + ' locked.');
+                updateTaskDisplay();
+                
+                // SPECIAL NIGHT EVENTS TRIGGERED BY LOCKING DOORS
+                triggerSpecialNightEvent(target.userData.name);
+                
+                checkNightComplete();
+            }
+        }
+        
+        // Special scripted night events per night
+        function triggerSpecialNightEvent(doorName) {
+            if (state.nightEventTriggered) return;
+            
+            // Night 1: After locking front door, the store layout shifts slightly
+            if (state.day === 1 && doorName === 'front') {
+                state.nightEventTriggered = true;
+                setTimeout(() => {
+                    lights.forEach(l => l.intensity = 0);
+                    audio.playCreepy();
+                    setTimeout(() => {
+                        // Move some clothing racks
+                        clothingRacks.forEach((rack, i) => {
+                            rack.position.x += (Math.random() - 0.5) * 2;
+                            rack.position.z += (Math.random() - 0.5) * 2;
+                        });
+                        // Rotate mannequins slightly toward player
+                        mannequins.forEach(m => {
+                            m.rotation.y += (Math.random() - 0.5) * 0.5;
+                        });
+                        lights.forEach(l => l.intensity = 0.35);
+                        showDialogue('', 'The lights went out for a moment.', 'creepy');
+                        setTimeout(() => showDialogue('Lina', "Did... did the store look like this before?", 'internal'), 2500);
+                        modifySanity(-2);
+                    }, 1500);
+                }, 1000);
+            }
+            
+            // Night 2: Front door won't lock - opens to reveal a bedroom
+            if (state.day === 2 && doorName === 'front') {
+                state.nightEventTriggered = true;
+                setTimeout(() => {
+                    // Actually unlock the door
+                    state.doorsLocked.front = false;
+                    const frontDoor = doors.find(d => d.userData.name === 'front');
+                    frontDoor.userData.locked = false;
+                    frontDoor.traverse(c => { if (c.userData.isLockIndicator) c.material = new THREE.MeshBasicMaterial({ color: 0x882222 }); });
+                    
+                    audio.playBang();
+                    showDialogue('', 'The front door swings back open.', 'creepy');
+                    
+                    // Create bedroom FIRST, then hide wall so it's immediately visible
+                    createBedroom();
+                    frontWall.visible = false;
+                    
+                    setTimeout(() => {
+                        showDialogue('', 'Through the doorway... that\'s not the street.', 'creepy');
+                        modifySanity(-6);
+                        setTimeout(() => {
+                            showDialogue('Lina', "That's a bedroom. That's someone's bedroom.", 'internal');
+                            setTimeout(() => {
+                                showDialogue('', 'The door slams shut on its own.', 'creepy');
+                                audio.playDoorLock();
+                                state.doorsLocked.front = true;
+                                frontDoor.userData.locked = true;
+                                frontDoor.traverse(c => { if (c.userData.isLockIndicator) c.material = new THREE.MeshBasicMaterial({ color: 0x228822 }); });
+                                removeBedroom();
+                                frontWall.visible = true;
+                                updateTaskDisplay();
+                            }, 4000);
+                        }, 3000);
+                    }, 1500);
+                }, 800);
+            }
+            
+            // Night 3: Sprinklers go off after first door locked
+            if (state.day === 3 && (doorName === 'front' || doorName === 'back') && !state.sprinklersTriggered) {
+                state.nightEventTriggered = true;
+                state.sprinklersTriggered = true;
+                setTimeout(() => {
+                    audio.startSprinklers();
+                    showDialogue('', 'SPRINKLERS ACTIVATE', 'creepy');
+                    document.getElementById('sprinkler-overlay').classList.add('active');
+                    modifySanity(-4);
+                    
+                    // Things start falling over
+                    setTimeout(() => {
+                        audio.playBang();
+                        showDialogue('', 'A clothing rack crashes to the floor!', 'creepy');
+                        clothingRacks[0].rotation.z = Math.PI / 2;
+                        clothingRacks[0].position.y = 0.5;
+                    }, 2000);
+                    
+                    setTimeout(() => {
+                        audio.playBang();
+                        const m = mannequins[Math.floor(Math.random() * mannequins.length)];
+                        m.rotation.x = Math.PI / 2;
+                        m.position.y = 0.3;
+                        showDialogue('', 'A mannequin topples over.', 'creepy');
+                        modifySanity(-1);
+                    }, 4500);
+                    
+                    setTimeout(() => {
+                        audio.playBang();
+                        clothingRacks[2].rotation.z = -Math.PI / 2;
+                        clothingRacks[2].position.y = 0.5;
+                    }, 6500);
+                    
+                    // Sprinklers stop after 15 seconds
+                    setTimeout(() => {
+                        audio.stopSprinklers();
+                        document.getElementById('sprinkler-overlay').classList.remove('active');
+                        showDialogue('', 'The sprinklers stop.', 'creepy');
+                        setTimeout(() => showDialogue('Lina', "What is happening to this place?", 'internal'), 2000);
+                    }, 15000);
+                }, 1200);
+            }
+            
+            // Night 4: Maya appears after locking a door
+            if (state.day === 4 && (doorName === 'front' || doorName === 'back') && !state.metMaya) {
+                state.nightEventTriggered = true;
+                state.metMaya = true;
+                setTimeout(() => {
+                    lights.forEach(l => l.intensity = 0.1);
+                    audio.playCreepy();
+                    
+                    // Spawn Maya behind player
+                    spawnMaya();
+                    
+                    setTimeout(() => {
+                        showDialogue('???', "You shouldn't be here.", 'creepy');
+                        setTimeout(() => {
+                            playDialogueSequence([
+                                { s: 'Lina', t: "Who—", internal: false },
+                                { s: 'Maya', t: "I used to work here.", creepy: true },
+                                { s: 'Maya', t: "A long time ago.", creepy: true },
+                                { s: 'Lina', t: "You're... Maya?", internal: false },
+                                { s: 'Maya', t: "They rebuilt it exactly the same.", creepy: true },
+                                { s: 'Maya', t: "Every tile. Every shelf. Every mannequin.", creepy: true },
+                                { s: 'Maya', t: "But they couldn't rebuild me.", creepy: true },
+                                { s: 'Lina', t: "What happened to you?", internal: false },
+                                { s: 'Maya', t: "The fire. I never left.", creepy: true },
+                                { s: 'Maya', t: "And now... neither will you.", creepy: true },
+                            ], () => {
+                                lights.forEach(l => l.intensity = 0);
+                                setTimeout(() => {
+                                    removeMaya();
+                                    lights.forEach(l => l.intensity = 0.35);
+                                    showDialogue('', "She's gone.");
+                                    modifySanity(-4);
+                                    audio.playHeartbeat();
+                                }, 1500);
+                            });
+                        }, 1500);
+                    }, 2000);
+                }, 1000);
+            }
+            
+            // Night 5: Everything converges
+            if (state.day === 5 && doorName === 'front') {
+                state.nightEventTriggered = true;
+                setTimeout(() => {
+                    // All mannequins look at player
+                    mannequins.forEach(m => {
+                        m.lookAt(camera.position.x, 1.5, camera.position.z);
+                    });
+                    showDialogue('', 'All the mannequins turn to face you.', 'creepy');
+                    audio.playCreepy();
+                    modifySanity(-6);
+                    
+                    setTimeout(() => {
+                        showDialogue('Maya', "It's time.", 'creepy');
+                        audio.playWhisper();
+                    }, 3000);
+                }, 1000);
+            }
+            
+            if (state.day === 5 && doorName === 'back') {
+                setTimeout(() => {
+                    // Mannequins start moving toward player
+                    const moveInterval = setInterval(() => {
+                        if (!state.isNight) { clearInterval(moveInterval); return; }
+                        mannequins.forEach(m => {
+                            const dir = new THREE.Vector3(camera.position.x - m.position.x, 0, camera.position.z - m.position.z).normalize();
+                            m.position.x += dir.x * 0.3;
+                            m.position.z += dir.z * 0.3;
+                            m.lookAt(camera.position.x, 1.5, camera.position.z);
+                        });
+                    }, 500);
+                    
+                    showDialogue('', 'They\'re coming.', 'creepy');
+                    audio.playHeartbeat();
+                    modifySanity(-1);
+                    
+                    setTimeout(() => clearInterval(moveInterval), 30000);
+                }, 1000);
+            }
+        }
+        
+        // Bedroom scene for night 2
+        let bedroomObjects = [];
+        function createBedroom() {
+            const bedroomGroup = new THREE.Group();
+            
+            // Position just outside front door (front door is at z=-23.9, wall at z=-24)
+            const roomZ = -27;
+            
+            // Floor - wooden
+            const floor = new THREE.Mesh(new THREE.PlaneGeometry(6, 5), createMaterial(0x5a4a3a));
+            floor.rotation.x = -Math.PI / 2;
+            floor.position.set(0, 0.02, roomZ);
+            bedroomGroup.add(floor);
+            
+            // Back wall - wallpaper texture color
+            const backWall = new THREE.Mesh(new THREE.PlaneGeometry(6, 3), createMaterial(0x7a6a6a));
+            backWall.position.set(0, 1.5, roomZ - 2.5);
+            bedroomGroup.add(backWall);
+            
+            // Side walls
+            const leftWall = new THREE.Mesh(new THREE.PlaneGeometry(5, 3), createMaterial(0x6a6a7a));
+            leftWall.rotation.y = Math.PI / 2;
+            leftWall.position.set(-3, 1.5, roomZ);
+            bedroomGroup.add(leftWall);
+            
+            const rightWall = new THREE.Mesh(new THREE.PlaneGeometry(5, 3), createMaterial(0x6a6a7a));
+            rightWall.rotation.y = -Math.PI / 2;
+            rightWall.position.set(3, 1.5, roomZ);
+            bedroomGroup.add(rightWall);
+            
+            // Bed against back wall - very visible
+            const bedFrame = new THREE.Mesh(new THREE.BoxGeometry(2.5, 0.4, 2.5), createMaterial(0x3a2a1a));
+            bedFrame.position.set(0, 0.2, roomZ - 1);
+            bedroomGroup.add(bedFrame);
+            
+            const mattress = new THREE.Mesh(new THREE.BoxGeometry(2.3, 0.25, 2.3), createMaterial(0xdddddd));
+            mattress.position.set(0, 0.45, roomZ - 1);
+            bedroomGroup.add(mattress);
+            
+            // Pillow
+            const pillow = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.12, 0.4), createMaterial(0xeeeeee));
+            pillow.position.set(0, 0.62, roomZ - 2);
+            bedroomGroup.add(pillow);
+            
+            // Blanket/duvet - red for visibility
+            const blanket = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.15, 1.5), createMaterial(0x8B2020));
+            blanket.position.set(0, 0.55, roomZ - 0.5);
+            bedroomGroup.add(blanket);
+            
+            // Nightstand
+            const nightstand = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), createMaterial(0x2a1a0a));
+            nightstand.position.set(1.8, 0.25, roomZ - 1.5);
+            bedroomGroup.add(nightstand);
+            
+            // Lamp on nightstand - glowing
+            const lampBase = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.15, 8), createMaterial(0x444444));
+            lampBase.position.set(1.8, 0.55, roomZ - 1.5);
+            bedroomGroup.add(lampBase);
+            const lampShade = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.1, 0.2, 8), new THREE.MeshBasicMaterial({ color: 0xffeeaa }));
+            lampShade.position.set(1.8, 0.75, roomZ - 1.5);
+            bedroomGroup.add(lampShade);
+            
+            // Dresser on side
+            const dresser = new THREE.Mesh(new THREE.BoxGeometry(1.2, 0.9, 0.5), createMaterial(0x3a2a1a));
+            dresser.position.set(-2, 0.45, roomZ - 1);
+            bedroomGroup.add(dresser);
+            
+            // Ceiling light (brighter so you can see)
+            const ceilingLight = new THREE.PointLight(0xffcc88, 0.8, 10);
+            ceilingLight.position.set(0, 2.5, roomZ);
+            bedroomGroup.add(ceilingLight);
+            
+            scene.add(bedroomGroup);
+            bedroomObjects.push(bedroomGroup);
+        }
+        
+        function removeBedroom() {
+            bedroomObjects.forEach(obj => scene.remove(obj));
+            bedroomObjects = [];
+        }
+        
+        // Maya character for night 4
+        let mayaCharacter = null;
+        function spawnMaya() {
+            mayaCharacter = new THREE.Group();
+            const mat = createMaterial(0x1a1a1a); // Dark figure
+            const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.65, 0.2), mat);
+            body.position.y = 1.1;
+            mayaCharacter.add(body);
+            const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mat);
+            head.position.y = 1.62;
+            mayaCharacter.add(head);
+            // Glowing eyes
+            const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+            const leftEye = new THREE.Mesh(new THREE.SphereGeometry(0.02), eyeMat);
+            leftEye.position.set(-0.035, 1.64, 0.1);
+            mayaCharacter.add(leftEye);
+            const rightEye = new THREE.Mesh(new THREE.SphereGeometry(0.02), eyeMat);
+            rightEye.position.set(0.035, 1.64, 0.1);
+            mayaCharacter.add(rightEye);
+            // Legs
+            [-.08, .08].forEach(lx => {
+                const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.7, 0.1), mat);
+                leg.position.set(lx, 0.35, 0);
+                mayaCharacter.add(leg);
+            });
+            // Position behind player
+            const behindPlayer = new THREE.Vector3(
+                camera.position.x - Math.sin(cameraYaw) * 3,
+                0,
+                camera.position.z - Math.cos(cameraYaw) * 3
+            );
+            mayaCharacter.position.copy(behindPlayer);
+            mayaCharacter.lookAt(camera.position.x, 1.5, camera.position.z);
+            scene.add(mayaCharacter);
+        }
+        
+        function removeMaya() {
+            if (mayaCharacter) {
+                scene.remove(mayaCharacter);
+                mayaCharacter = null;
+            }
+        }
+        
+        function handleTill() {
+            if (!state.isNight) {
+                audio.playRegister();
+                showDialogue('', 'Ka-ching!');
+            } else if (!state.tillCounted) {
+                showDialogue('', 'Counting...');
+                setTimeout(() => {
+                    // Weird till events
+                    const weird = Math.random() < 0.3 + state.day * 0.1;
+                    if (weird && state.day >= 2) {
+                        const amount = 13 * state.day;
+                        showDialogue('', `Till is €${amount} short. Exactly.`, 'creepy');
+                        modifySanity(-2);
+                        setTimeout(() => {
+                            if (state.foundItems.includes('mayaNote')) {
+                                showDialogue('Lina', "Maya mentioned this... the numbers...", 'internal');
+                            } else {
+                                showDialogue('Lina', "That's oddly specific...", 'internal');
+                            }
+                        }, 2500);
+                    } else {
+                        audio.playRegister();
+                        showDialogue('', 'Till balanced.');
+                    }
+                    state.tillCounted = true;
+                    updateTaskDisplay();
+                    checkNightComplete();
+                }, 1800);
+            }
+        }
+        
+        function handleStockroom() {
+            console.log('handleStockroom called', { escapeActive: state.escapeActive, trapActive: state.trapActive, isNight: state.isNight });
+            
+            // Normal stockroom behavior
+            if (!state.isNight) {
+                showDialogue('', 'Stockroom. Anna\'s domain.');
+                return;
+            }
+            
+            if (state.investigatedBang) {
+                showDialogue('', 'The stockroom is dark. Empty.');
+                setTimeout(() => showDialogue('Lina', "Nothing here. But I HEARD something.", 'internal'), 2500);
+                return;
+            }
+            
+            // First time at night - choice to investigate
+            showDialogue('', 'The stockroom door is cold to the touch.');
+            showChoice([
+                { text: "Open it", action: () => investigateStockroom() },
+                { text: "Leave it", action: () => { 
+                    showDialogue('Lina', "Better not.", 'internal');
+                    state.viviTrust -= 5;
+                }}
+            ]);
+        }
+        
+        // Handler for the dedicated escape door
+        function handleEscapeDoorInteract() {
+            console.log('=== ESCAPE DOOR INTERACT ===');
+            console.log('escapeActive:', state.escapeActive);
+            console.log('trapActive:', state.trapActive);
+            
+            if (state.escapeActive) {
+                // GOOD ENDING
+                state.escapeActive = false;
+                state.gameStarted = false;
+                hideEscapeDoor();
+                audio.stopFire();
+                document.getElementById('fire-overlay').classList.remove('active');
+                
+                showDialogue('', 'You burst through the door into the cold night air.');
+                setTimeout(() => {
+                    showDialogue('', 'Behind you, The Pull of Bear burns.');
+                    setTimeout(() => {
+                        showDialogue('Maya', "Thank you... I'm free now.", 'creepy');
+                        setTimeout(() => {
+                            showEnding("REST IN PEACE",
+                                "The Pull of Bear burned to the ground that night.\n\nThe company decided not to rebuild. Not this time.\n\nMaya Chen's spirit, trapped for five years, was finally free.\n\nYou answered " + state.phoneAnswered + " of " + state.phoneTotal + " calls.\nYou stayed connected. And that made all the difference.");
+                        }, 3000);
+                    }, 2500);
+                }, 2500);
+                return;
+            }
+            
+            if (state.trapActive) {
+                // BAD ENDING
+                state.trapActive = false;
+                state.gameStarted = false;
+                hideEscapeDoor();
+                
+                audio.playDoorLock();
+                showDialogue('', 'The door SLAMS shut behind you.', 'creepy');
+                
+                setTimeout(() => {
+                    lights.forEach(l => l.intensity = 0.05);
+                    showDialogue('Maya', "You came.", 'creepy');
+                    setTimeout(() => {
+                        showDialogue('Maya', "There is no ViVi. Just me.", 'creepy');
+                        setTimeout(() => {
+                            audio.startSprinklers();
+                            document.getElementById('sprinkler-overlay').classList.add('active');
+                            showDialogue('Maya', "The sprinklers couldn't save me...", 'creepy');
+                            setTimeout(() => {
+                                audio.stopSprinklers();
+                                document.getElementById('sprinkler-overlay').classList.remove('active');
+                                document.getElementById('fire-overlay').classList.add('active');
+                                audio.playFire();
+                                showDialogue('Maya', "Nothing can stop the fire.", 'creepy');
+                                setTimeout(() => {
+                                    showEnding("CONSUMED",
+                                        "The fire spread too fast. The door wouldn't open.\n\nThey found the store burned to the ground. Two bodies this time.\n\nThe company rebuilt it exactly the same.\n\nYou only answered " + state.phoneAnswered + " of " + state.phoneTotal + " calls.\nYou stopped listening. Just like Maya did.");
+                                }, 3000);
+                            }, 3000);
+                        }, 2500);
+                    }, 2500);
+                }, 2000);
+                return;
+            }
+            
+            // Door not active yet
+            showDialogue('', 'Emergency exit. Locked.');
+        }
+        
+        function investigateStockroom() {
+            state.investigatedBang = true;
+            showDialogue('', 'You open the door. Pitch black inside.');
+            setTimeout(() => {
+                if (state.day >= 3) {
+                    showDialogue('', 'For a moment, you see a figure. Then nothing.', 'creepy');
+                    modifySanity(-2);
+                    audio.playCreepy();
+                    setTimeout(() => showDialogue('Lina', "I saw... no. No, I didn't.", 'internal'), 2500);
+                } else {
+                    showDialogue('', 'Shelves. Boxes. A knocked-over mannequin.');
+                    setTimeout(() => showDialogue('Lina', "Must have fallen...", 'internal'), 2500);
+                }
+            }, 2000);
+        }
+        
+        function handleStoryItem(itemKey) {
+            if (storyItems[itemKey].found) return;
+            storyItems[itemKey].found = true;
+            state.foundItems.push(itemKey);
+            
+            document.getElementById('item-title').textContent = storyItems[itemKey].title;
+            document.getElementById('item-desc').textContent = storyItems[itemKey].desc;
+            document.getElementById('found-item').classList.add('active');
+            
+            audio.playInteract();
+            
+            // Story progression based on items
+            if (itemKey === 'mayaNote') {
+                state.learnedAboutMaya = true;
+                state.foundMayaNote = true;
+            } else if (itemKey === 'mayaBadge') {
+                state.foundMayaBadge = true;
+            } else if (itemKey === 'burnedPhoto') {
+                state.foundPhoto = true;
+                modifySanity(-4);
+            } else if (itemKey === 'newspaper') {
+                state.learnedAboutMaya = true;
+            }
+        }
+        
+        function closeFoundItem() {
+            document.getElementById('found-item').classList.remove('active');
+        }
+        
+        function handlePhone() {
+            if (state.phoneRinging) {
+                state.phoneRinging = false;
+                state.phoneAnswered++; // Track answered calls
+                audio.playInteract();
+                updateTaskDisplay();
+                
+                // Handle different call types
+                if (state.pendingCall === 'anna') {
+                    const annaCallTypes = [
+                        [
+                            { s: '', t: 'You answer.' },
+                            { s: 'Anna', t: "Linaaaa! Help!" },
+                            { s: 'Lina', t: "What now, Anna?" },
+                            { s: 'Anna', t: "The computer! It's doing the thing again!" },
+                            { s: 'Lina', t: "What thing?" },
+                            { s: 'Anna', t: "The THING! With the spreadsheets!" },
+                            { s: 'Lina', t: "I'll handle it.", internal: true },
+                        ],
+                        [
+                            { s: '', t: 'You answer.' },
+                            { s: 'Anna', t: "Can you cover the floor? I need a smoke." },
+                            { s: 'Lina', t: "Anna, you just had a break." },
+                            { s: 'Anna', t: "Pleeeease? I'll bring you coffee!" },
+                            { s: 'Lina', t: "Fine.", internal: true },
+                        ],
+                        [
+                            { s: '', t: 'You answer.' },
+                            { s: 'Anna', t: "Do you ever feel like we're being watched?" },
+                            { s: 'Lina', t: "What?" },
+                            { s: 'Anna', t: "The mannequins. They give me the creeps." },
+                            { s: 'Lina', t: "...You're in the stockroom, Anna." },
+                            { s: 'Anna', t: "I KNOW WHAT I SAID." },
+                            { s: 'Lina', t: "She's losing it.", internal: true },
+                        ],
+                    ];
+                    playDialogueSequence(annaCallTypes[Math.floor(Math.random() * annaCallTypes.length)], () => {
+                        state.annaTask = 'inventory';
+                        state.computerTask = 'inventory count';
+                        updateTaskDisplay();
+                    });
+                    state.pendingCall = null;
+                } 
+                else if (state.pendingCall === 'customer') {
+                    const customerCalls = [
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "Do you have size 10 in blue?" }, { s: 'Lina', t: "Let me check... yes, we do!" }, { s: 'Customer', t: "Great! I'll stop by." }],
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "What time do you close?" }, { s: 'Lina', t: "9 PM tonight." }, { s: 'Customer', t: "Perfect, thanks!" }],
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "I bought something last week, can I return it?" }, { s: 'Lina', t: "With a receipt, yes." }, { s: 'Customer', t: "What if I don't have the receipt?" }, { s: 'Lina', t: "Store credit only." }, { s: 'Customer', t: "Ugh. Fine." }],
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "Is this The Pull of Bear?" }, { s: 'Lina', t: "Yes it is." }, { s: 'Customer', t: "...weird name." }, { s: 'Lina', t: "I just work here.", internal: true }],
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "Hey! Do you like Panda Bear?" }, { s: 'Lina', t: "...The musician?" }, { s: 'Customer', t: "Person Pitch changed my life!" }, { s: 'Lina', t: "This is a clothing store." }, { s: 'Customer', t: "Bros is a top 10 song. Anyway, later!" }, { s: 'Lina', t: "That was weird.", internal: true }],
+                        [{ s: '', t: 'You answer.' }, { s: 'Customer', t: "Hi I'm looking for a bear costume?" }, { s: 'Lina', t: "We don't sell costumes." }, { s: 'Customer', t: "But you're called The Pull of Bear!" }, { s: 'Lina', t: "It's... metaphorical?" }, { s: 'Lina', t: "I actually have no idea what our name means.", internal: true }],
+                    ];
+                    playDialogueSequence(customerCalls[Math.floor(Math.random() * customerCalls.length)]);
+                    state.pendingCall = null;
+                }
+                else if (state.pendingCall === 'weird' || (state.isNight && state.day >= 3)) {
+                    // Creepy calls
+                    if (!state.answeredCreepyCall && Math.random() < 0.6) {
+                        playDialogueSequence([
+                            { s: '', t: 'You answer.' },
+                            { s: '', t: '...' },
+                            { s: 'Voice', t: "She's still there.", creepy: true },
+                            { s: 'Lina', t: "Who is this?" },
+                        ], () => {
+                            showChoice([
+                                { text: "Keep listening", action: () => {
+                                    state.answeredCreepyCall = true;
+                                    playDialogueSequence([
+                                        { s: 'Voice', t: "Maya never left.", creepy: true },
+                                        { s: 'Voice', t: "She's in the walls. In the mannequins.", creepy: true },
+                                        { s: 'Voice', t: "Don't stay past closing on night five.", creepy: true },
+                                        { s: '', t: 'Click.' },
+                                    ], () => {
+                                        showDialogue('Lina', "What the actual hell?", 'internal');
+                                        modifySanity(-6);
+                                        state.learnedAboutMaya = true;
+                                    });
+                                }},
+                                { text: "Hang up", action: () => {
+                                    showDialogue('', 'You slam the phone down.');
+                                    modifySanity(-2);
+                                }}
+                            ]);
+                        });
+                    } else {
+                        const weirdCalls = [
+                            [{ s: '', t: 'You answer.' }, { s: '', t: 'Static.' }, { s: '', t: 'Then... breathing.' }, { s: 'Lina', t: "Hello?", internal: true }, { s: '', t: 'Click.' }],
+                            [{ s: '', t: 'You answer.' }, { s: 'Voice', t: "Is Maya working tonight?", creepy: true }, { s: 'Lina', t: "There's no Maya here." }, { s: 'Voice', t: "There will be.", creepy: true }, { s: '', t: 'Click.' }],
+                            [{ s: '', t: 'You answer.' }, { s: '', t: 'A child singing. Far away.' }, { s: '', t: '"Ring around the rosie..."', creepy: true }, { s: 'Lina', t: "NOPE.", internal: true }, { s: '', t: 'You hang up.' }],
+                        ];
+                        playDialogueSequence(weirdCalls[Math.floor(Math.random() * weirdCalls.length)], () => {
+                            modifySanity(-1);
+                        });
+                    }
+                    state.pendingCall = null;
+                }
+                state.phoneCalls++;
+            } else {
+                showDialogue('', 'Phone is quiet.');
+            }
+        }
+        
+        function handleComputer() {
+            // Night shift logout - final task
+            if (state.isNight && state.readyToLogout) {
+                audio.playComputer();
+                showDialogue('', 'Logging out...');
+                setTimeout(() => {
+                    audio.playComputer();
+                    showDialogue('', 'Clocked out. Time to go.');
+                    setTimeout(() => completeNight(), 1500);
+                }, 2000);
+                return;
+            }
+            
+            // Anna needs inventory help
+            if (state.annaTask === 'inventory') {
+                audio.playComputer();
+                showDialogue('', "Running Anna's report...");
+                setTimeout(() => {
+                    audio.playComputer();
+                    showDialogue('', "Done.");
+                    state.annaTask = null;
+                    updateTaskDisplay();
+                }, 1800);
+                return;
+            }
+            
+            // Regular computer task
+            if (state.computerTask) {
+                audio.playComputer();
+                showDialogue('', 'Processing ' + state.computerTask + '...');
+                setTimeout(() => {
+                    audio.playComputer();
+                    showDialogue('', state.computerTask + ' done.');
+                    state.computerTask = null;
+                    updateTaskDisplay();
+                }, 1500);
+                return;
+            }
+            
+            // Wifi down
+            if (state.wifiDown) {
+                showDialogue('', 'No connection. Reset the router first.');
+                return;
+            }
+            
+            // Easter egg - old files (day 4+)
+            if (state.day >= 4 && !state.lookedAtPhoto) {
+                showDialogue('', 'Old employee folder... "Maya_Chen_2019"');
+                showChoice([
+                    { text: "Open it", action: () => {
+                        state.lookedAtPhoto = true;
+                        showDialogue('', 'A photo loads. Maya, smiling, standing by the mannequins.', 'creepy');
+                        setTimeout(() => {
+                            showDialogue('', 'In the background, one mannequin is looking at the camera.', 'creepy');
+                            modifySanity(-4);
+                            audio.playCreepy();
+                        }, 3000);
+                    }},
+                    { text: "Close it", action: () => showDialogue('Lina', "None of my business.", 'internal') }
+                ]);
+                return;
+            }
+            
+            // Default
+            showDialogue('', 'Nothing urgent.');
+        }
+        
+        function handleRouter() {
+            if (state.wifiDown) {
+                audio.playInteract();
+                showDialogue('', 'Resetting...');
+                router.traverse(c => { if (c.userData.isRouterLight) c.material.color.setHex(0xffaa00); });
+                setTimeout(() => {
+                    router.traverse(c => { if (c.userData.isRouterLight) c.material.color.setHex(0x00ff00); });
+                    showDialogue('', 'WiFi restored.');
+                    state.wifiDown = false;
+                    updateTaskDisplay();
+                }, 2000);
+            } else {
+                showDialogue('', 'Router OK.');
+            }
+        }
+
+        // ============ CUSTOMER DIALOGUES ============
+        const normalDialogues = [
+            [{ s: 'Customer', t: "Just this please!" }, { s: 'Lina', t: "€24.99." }, { s: 'Customer', t: "Thanks!" }],
+            [{ s: 'Customer', t: "Is this on sale?" }, { s: 'Lina', t: "20% off today." }, { s: 'Customer', t: "Perfect!" }],
+            [{ s: 'Customer', t: "Can I return this?" }, { s: 'Lina', t: "Receipt?" }, { s: 'Customer', t: "Here!" }, { s: 'Lina', t: "Done." }],
+            [{ s: 'Customer', t: "Working alone?" }, { s: 'Lina', t: "Anna's in back." }, { s: 'Customer', t: "Must be quiet." }, { s: 'Lina', t: "You get used to it.", internal: true }],
+            [{ s: 'Customer', t: "Do you have this in a medium?" }, { s: 'Lina', t: "Let me check..." }, { s: 'Lina', t: "Yes! Last one." }, { s: 'Customer', t: "Lucky me!" }],
+            [{ s: 'Customer', t: "What's the wifi password?" }, { s: 'Lina', t: "pullofbear2024." }, { s: 'Customer', t: "All lowercase?" }, { s: 'Lina', t: "Yes." }, { s: 'Customer', t: "Thanks! Just need to post something." }, { s: 'Lina', t: "People and their phones.", internal: true }],
+            [{ s: 'Customer', t: "Excuse me, where's the fitting room?" }, { s: 'Lina', t: "Around the corner, past the mannequins." }, { s: 'Customer', t: "The creepy ones?" }, { s: 'Lina', t: "...yeah, those." }, { s: 'Customer', t: "Cool cool cool..." }],
+            [{ s: 'Customer', t: "Hi! Just browsing." }, { s: 'Lina', t: "Let me know if you need anything." }, { s: '', t: '10 minutes later...' }, { s: 'Customer', t: "Actually, I'll take all of this." }, { s: 'Lina', t: "That's €247.50." }, { s: 'Customer', t: "Retail therapy." }],
+            [{ s: 'Customer', t: "Why is it called The Pull of Bear?" }, { s: 'Lina', t: "Honestly? No idea." }, { s: 'Customer', t: "Is it a bear pun? Like... bear with us?" }, { s: 'Lina', t: "That's... probably it." }, { s: 'Customer', t: "Weird." }, { s: 'Lina', t: "Very.", internal: true }],
+            [{ s: 'Customer', t: "My girlfriend sent me here." }, { s: 'Lina', t: "What's she looking for?" }, { s: 'Customer', t: "I have no idea. She just said 'you'll know when you see it.'" }, { s: 'Lina', t: "That's... not helpful." }, { s: 'Customer', t: "Tell me about it." }],
+        ];
+        
+        const creepyDialogues = [
+            [{ s: 'Customer', t: "Have you seen her?" }, { s: 'Lina', t: "Who?" }, { s: 'Customer', t: "The girl who used to work here." }, { s: 'Customer', t: "She's still around, you know.", creepy: true }, { s: 'Lina', t: "...what?", internal: true }],
+            [{ s: 'Customer', t: "The mannequins look different today." }, { s: 'Lina', t: "We haven't moved them." }, { s: 'Customer', t: "I know.", creepy: true }, { s: 'Lina', t: "Okay then...", internal: true }],
+            [{ s: 'Customer', t: "This store burned down once." }, { s: 'Lina', t: "Did it?" }, { s: 'Customer', t: "Someone was inside.", creepy: true }, { s: 'Customer', t: "They rebuilt it exactly the same.", creepy: true }],
+            [{ s: 'Customer', t: "Do you work the night shift?" }, { s: 'Lina', t: "Sometimes." }, { s: 'Customer', t: "Be careful.", creepy: true }, { s: 'Lina', t: "Why?" }, { s: 'Customer', t: "Just... be careful." }, { s: '', t: 'They leave without buying anything.' }],
+            [{ s: 'Customer', t: "You look just like her." }, { s: 'Lina', t: "Like who?" }, { s: 'Customer', t: "The girl in the photo. Behind the counter.", creepy: true }, { s: 'Lina', t: "There's no photo behind the—", internal: true }, { s: '', t: 'They\'re already gone.' }],
+            [{ s: 'Customer', t: "I used to shop here. Before." }, { s: 'Lina', t: "Before what?" }, { s: 'Customer', t: "Before they rebuilt it.", creepy: true }, { s: 'Customer', t: "The new paint can't cover the smoke smell.", creepy: true }, { s: 'Lina', t: "I can't smell anything.", internal: true }, { s: 'Customer', t: "You will.", creepy: true }],
+        ];
+        
+        const mayaDialogues = [
+            [{ s: 'Customer', t: "You remind me of her." }, { s: 'Lina', t: "Of who?" }, { s: 'Customer', t: "Maya. She worked nights too.", creepy: true }, { s: 'Customer', t: "Before the fire.", creepy: true }, { s: 'Lina', t: "I don't know what you're talking about.", internal: true }],
+            [{ s: 'Customer', t: "Maya Chen?" }, { s: 'Lina', t: "I don't know anyone named—" }, { s: 'Customer', t: "She was night shift. Like you.", creepy: true }, { s: 'Customer', t: "They say she never clocked out.", creepy: true }, { s: 'Lina', t: "What does that mean?", internal: true }, { s: '', t: 'They don\'t answer.' }],
+        ];
+
+        function handleCustomerInteraction() {
+            if (!state.customerAtCounter || state.customerServed) return;
+            state.customerServed = true;
+            audio.playInteract();
+            
+            let dialogues;
+            if (state.currentCustomer.knowsMaya) {
+                dialogues = mayaDialogues;
+                state.learnedAboutMaya = true;
+                modifySanity(-2);
+            } else if (state.currentCustomer.creepy) {
+                dialogues = creepyDialogues;
+                modifySanity(-1);
+            } else {
+                dialogues = normalDialogues;
+            }
+            
+            playDialogueSequence(dialogues[Math.floor(Math.random() * dialogues.length)], () => {
+                audio.playRegister();
+                state.customersServedToday++;
+                setTimeout(() => {
+                    makeCustomerLeave();
+                    if (state.customersServedToday >= state.customersNeeded && !state.isNight) {
+                        setTimeout(() => endDay(), 2000);
+                    }
+                }, 1200);
+            });
+        }
+        
+        // ============ RANDOM DAY TASKS ============
+        function triggerRandomTask() {
+            if (state.isNight) return;
+            const rand = Math.random();
+            
+            // Phone ringing - sometimes Anna, sometimes customers, sometimes weird
+            if (rand < 0.35 && !state.phoneRinging) {
+                state.phoneRinging = true;
+                state.phoneTotal++; // Track total calls
+                const callType = Math.random();
+                if (callType < 0.4) {
+                    state.pendingCall = 'anna';
+                } else if (callType < 0.7) {
+                    state.pendingCall = 'customer';
+                } else if (state.day >= 2) {
+                    state.pendingCall = 'weird';
+                } else {
+                    state.pendingCall = 'customer';
+                }
+                audio.playPhone();
+                showDialogue('', 'Phone ringing...');
+                updateTaskDisplay();
+                setTimeout(() => { 
+                    if (state.phoneRinging) { 
+                        state.phoneRinging = false; 
+                        state.pendingCall = null;
+                        showDialogue('', 'Missed call.');
+                        updateTaskDisplay(); 
+                    } 
+                }, 12000);
+            } 
+            // Computer task
+            else if (rand < 0.55 && !state.computerTask) {
+                const tasks = ['price check', 'inventory count', 'restock order', 'return processing', 'schedule update'];
+                state.computerTask = tasks[Math.floor(Math.random() * tasks.length)];
+                showDialogue('', 'Computer needs attention: ' + state.computerTask);
+                updateTaskDisplay();
+            } 
+            // WiFi down
+            else if (rand < 0.7 && !state.wifiDown) {
+                state.wifiDown = true;
+                router.traverse(c => { if (c.userData.isRouterLight) c.material.color.setHex(0xff0000); });
+                showDialogue('', 'WiFi is down. Customers are complaining.');
+                updateTaskDisplay();
+            }
+            // Anna needs help
+            else if (rand < 0.85 && !state.annaTask) {
+                const annaTasks = ['stockroom', 'inventory', 'break'];
+                state.annaTask = annaTasks[Math.floor(Math.random() * annaTasks.length)];
+                if (state.annaTask === 'stockroom') {
+                    showDialogue('Anna', "Lina! Can you check the stockroom? I heard something back there.");
+                } else if (state.annaTask === 'inventory') {
+                    showDialogue('Anna', "Hey, corporate wants an inventory check. Computer's all yours!");
+                    state.computerTask = 'inventory count';
+                } else {
+                    showDialogue('Anna', "I'm taking my break. Hold down the fort!");
+                    state.annaOnBreak = true;
+                    setTimeout(() => { 
+                        state.annaOnBreak = false; 
+                        state.annaTask = null;
+                        showDialogue('Anna', "I'm back! Miss me?");
+                    }, 20000);
+                }
+                updateTaskDisplay();
+            }
+        }
+        
+        function updateTaskDisplay() {
+            const tasks = [];
+            if (state.phoneRinging) tasks.push('📞 PHONE');
+            if (state.computerTask) tasks.push('💻 ' + state.computerTask.toUpperCase());
+            if (state.annaTask === 'stockroom') tasks.push('📦 STOCKROOM');
+            if (state.annaOnBreak) tasks.push('☕ ANNA ON BREAK');
+            if (state.wifiDown) tasks.push('📶 WIFI DOWN');
+            if (state.escapeActive) tasks.push('🔥 RED DOOR - LEFT WALL!');
+            if (state.trapActive) tasks.push('🚪 RED DOOR - LEFT WALL');
+            if (state.isNight && !state.escapeActive && !state.trapActive) {
+                if (!state.doorsLocked.front) tasks.push('🚪 FRONT');
+                if (!state.doorsLocked.back) tasks.push('🚪 BACK');
+                if (!state.tillCounted) tasks.push('💰 TILL');
+                if (state.readyToLogout) tasks.push('💻 LOG OUT');
+            }
+            document.getElementById('task-display').textContent = tasks.join(' · ');
+        }
+
+        // ============ NIGHT EVENTS - ESCALATING ============
+        const nightEvents = {
+            1: [
+                () => { showDialogue('', 'The lights flicker.'); lights.forEach(l => l.intensity = 0.1); setTimeout(() => lights.forEach(l => l.intensity = 0.35), 300); },
+                () => { showDialogue('', 'A creak from the rafters.'); },
+                () => { audio.playFootstep(); setTimeout(() => audio.playFootstep(), 400); showDialogue('', 'Footsteps?'); },
+            ],
+            2: [
+                () => { showDialogue('', 'A mannequin\'s head seems to have turned.', 'creepy'); modifySanity(-2); },
+                () => { audio.playBang(); showDialogue('', 'BANG from the stockroom!', 'creepy'); modifySanity(-2); },
+                () => { showDialogue('', 'The phone rings once. Stops.', 'creepy'); modifySanity(-1); },
+            ],
+            3: [
+                () => { 
+                    const m = mannequins[Math.floor(Math.random() * mannequins.length)];
+                    const dir = new THREE.Vector3(camera.position.x - m.position.x, 0, camera.position.z - m.position.z).normalize();
+                    m.position.x += dir.x * 1.5;
+                    m.position.z += dir.z * 1.5;
+                    m.lookAt(camera.position.x, 1.5, camera.position.z);
+                    state.mannequinsMoved++;
+                    showDialogue('', 'That mannequin wasn\'t there before.', 'creepy');
+                    modifySanity(-4);
+                    audio.playCreepy();
+                },
+                () => { audio.playWhisper(); showDialogue('', 'Whispering. Your name?', 'creepy'); modifySanity(-1); },
+                () => { 
+                    lights.forEach(l => l.intensity = 0);
+                    showDialogue('', 'BLACKOUT.', 'creepy');
+                    modifySanity(-4);
+                    setTimeout(() => {
+                        lights.forEach(l => l.intensity = 0.35);
+                        if (state.mannequinsMoved > 0) {
+                            showDialogue('', 'The mannequins are closer.', 'creepy');
+                            modifySanity(-1);
+                        }
+                    }, 3000);
+                },
+            ],
+            4: [
+                () => {
+                    mannequins.forEach(m => {
+                        m.lookAt(camera.position.x, 1.5, camera.position.z);
+                    });
+                    showDialogue('', 'They\'re all looking at you.', 'creepy');
+                    modifySanity(-6);
+                    audio.playCreepy();
+                },
+                () => {
+                    showDialogue('', 'You see her in the window. Maya.', 'creepy');
+                    modifySanity(-6);
+                    audio.playCreepy();
+                    setTimeout(() => showDialogue('Lina', "No. No no no.", 'internal'), 2500);
+                },
+                () => {
+                    audio.playBang(); audio.playBang();
+                    showDialogue('', 'The stockroom door is shaking.', 'creepy');
+                    modifySanity(-2);
+                },
+            ],
+            5: [
+                () => {
+                    showDialogue('', 'The mannequins are moving. You can see them now.', 'creepy');
+                    mannequins.forEach(m => {
+                        const dir = new THREE.Vector3(camera.position.x - m.position.x, 0, camera.position.z - m.position.z).normalize();
+                        m.position.x += dir.x * 0.5;
+                        m.position.z += dir.z * 0.5;
+                    });
+                    modifySanity(-7);
+                    audio.playCreepy();
+                },
+                () => {
+                    showDialogue('Maya', "Why didn't you leave?", 'creepy');
+                    modifySanity(-1);
+                    audio.playWhisper();
+                },
+                () => {
+                    lights.forEach(l => l.intensity = 0);
+                    setTimeout(() => {
+                        lights.forEach(l => l.intensity = 0.15);
+                        showDialogue('', 'She\'s behind you.', 'creepy');
+                        modifySanity(-4);
+                        audio.playHeartbeat();
+                    }, 2000);
+                },
+            ],
+        };
+        
+        function triggerNightEvent() {
+            const dayEvents = nightEvents[state.day] || nightEvents[1];
+            dayEvents[Math.floor(Math.random() * dayEvents.length)]();
+        }
+        
+        // DEV FUNCTION - Press P to skip cycles
+        function devSkipCycle() {
+            console.log('DEV: Skipping cycle. Day:', state.day, 'Night:', state.isNight);
+            if (!state.isNight) {
+                // Skip to night
+                showDialogue('DEV', 'Skipping to night...');
+                endDay();
+            } else {
+                // Skip to next day or ending
+                showDialogue('DEV', 'Skipping to next day...');
+                if (state.day >= 5) {
+                    triggerEnding();
+                } else {
+                    nextDay();
+                }
+            }
+        }
+
+        // ============ VIVI CALLS ============
+        function viviNightCall() {
+            state.phoneRinging = false;
+            audio.playInteract();
+            
+            const viviDialogues = {
+                1: [
+                    { s: 'ViVi', t: "Hey Lina! Just checking in." },
+                    { s: 'ViVi', t: "Standard closing procedure - lock both doors, count the till." },
+                    { s: 'ViVi', t: "Easy peasy. Call me if anything weird happens!" },
+                    { s: 'Lina', t: "Define 'weird'.", internal: true },
+                ],
+                2: [
+                    { s: 'ViVi', t: "Lina! How's it going?" },
+                    { s: 'Lina', t: "Fine. Heard some noises last night though." },
+                    { s: 'ViVi', t: "Oh that's just... pipes. Old building, you know?" },
+                    { s: 'ViVi', t: "Just ignore anything weird. It's nothing." },
+                    { s: 'Lina', t: "She sounds nervous.", internal: true },
+                ],
+                3: [
+                    { s: 'ViVi', t: "Lina. Listen carefully." },
+                    { s: 'ViVi', t: "Don't linger tonight. Get your tasks done and get out." },
+                    { s: 'Lina', t: "ViVi, what's going on?" },
+                    { s: 'ViVi', t: "Nothing! Just... don't stay past midnight. Please." },
+                    { s: 'Lina', t: "What happens at midnight?", internal: true },
+                ],
+                4: [
+                    { s: 'ViVi', t: "Lina. Did you find anything? Papers, photos?" },
+                    { s: 'Lina', t: "Maybe. Why?" },
+                    { s: 'ViVi', t: "Don't read them. Just... finish up and leave." },
+                    { s: 'ViVi', t: "Before midnight. I mean it.", creepy: true },
+                    { s: 'Lina', t: "She knows something.", internal: true },
+                ],
+                5: [
+                    { s: 'ViVi', t: "Lina. Tonight is the anniversary." },
+                    { s: 'Lina', t: "Anniversary of what?" },
+                    { s: 'ViVi', t: "The fire. Maya... they never found her body." },
+                    { s: 'ViVi', t: "They rebuilt it exactly the same. Exactly.", creepy: true },
+                    { s: 'ViVi', t: "GET OUT BEFORE MIDNIGHT.", creepy: true },
+                    { s: 'Lina', t: "Oh god.", internal: true },
+                ],
+            };
+            
+            const dialogues = viviDialogues[state.day] || viviDialogues[1];
+            playDialogueSequence(dialogues, () => {
+                showDialogue('', 'ViVi hangs up.');
+                updateTaskDisplay();
+                
+            });
+        }
+
+        // ============ TIME SYSTEM ============
+        let gameTime = 0, lastTaskTime = 0;
+        
+        function updateGameTime(delta) {
+            if (!state.gameStarted || state.isNight) return;
+            gameTime += delta;
+            if (gameTime >= 0.75) {  // 2.5x longer days (was 0.3)
+                gameTime = 0;
+                state.minute += 5;
+                if (state.minute >= 60) { 
+                    state.minute = 0; 
+                    state.hour++;
+                    
+                    // End of day at 9PM
+                    if (state.hour >= 21) {
+                        endDay();
+                        return;
+                    }
+                }
+                updateTimeDisplay();
+            }
+            // Trigger random tasks less frequently - every 12 seconds, 15% chance
+            if (Date.now() - lastTaskTime > 12000 && Math.random() > 0.85 && !state.phoneRinging && !state.computerTask && !state.wifiDown) {
+                triggerRandomTask();
+                lastTaskTime = Date.now();
+            }
+            // Spawn customers
+            if (!customerMesh && !state.customerWalking && state.customersServedToday < state.customersNeeded && Math.random() > 0.93) {
+                spawnCustomer();
+            }
+        }
+        
+        function updateNight(delta) {
+            if (!state.isNight) return;
+            
+            // Night events - more frequent on later days (atmospheric only)
+            state.nightEventTimer += delta;
+            const eventInterval = Math.max(8, 20 - state.day * 2);
+            if (state.nightEventTimer > eventInterval) {
+                state.nightEventTimer = 0;
+                if (Math.random() < 0.4 + state.day * 0.08) {
+                    triggerNightEvent();
+                }
+            }
+            
+            // Random ambient sounds at night
+            if (Math.random() < 0.003 + state.day * 0.001) {
+                const sounds = ['footstep', 'creak', 'bang', 'whisper'];
+                const sound = sounds[Math.floor(Math.random() * sounds.length)];
+                switch(sound) {
+                    case 'footstep': audio.playFootstep(); break;
+                    case 'creak': audio.playCreepy(); break;
+                    case 'bang': audio.playBang(); break;
+                    case 'whisper': if (state.day >= 3) audio.playWhisper(); break;
+                }
+            }
+        }
+
+        function updateTimeDisplay() {
+            const ampm = state.hour >= 12 ? 'PM' : 'AM';
+            const h = state.hour > 12 ? state.hour - 12 : (state.hour || 12);
+            document.getElementById('time-display').textContent = h + ':' + state.minute.toString().padStart(2, '0') + ' ' + ampm;
+            document.getElementById('day-display').textContent = 'DAY ' + state.day;
+        }
+
+        // ============ DAY/NIGHT TRANSITIONS ============
+        function endDay() {
+            const trans = document.getElementById('transition');
+            document.getElementById('transition-text').textContent = 'CLOSING TIME';
+            document.getElementById('transition-subtext').textContent = state.day >= 3 ? 'Don\'t take too long.' : '';
+            trans.classList.add('active');
+            audio.stopDayMusic();
+            if (customerMesh) { scene.remove(customerMesh); customerMesh = null; }
+            hideCustomerItem();
+            
+            setTimeout(() => {
+                state.isNight = true;
+                state.hour = 21; state.minute = 0;
+                state.nightEventTimer = 0;
+                updateTimeDisplay();
+                document.getElementById('night-tint').classList.add('active');
+                lights.forEach(l => l.intensity = 0.35);
+                state.phoneRinging = false;
+                state.computerTask = null;
+                state.annaTask = null;
+                state.wifiDown = false;
+                router.traverse(c => { if (c.userData.isRouterLight) c.material.color.setHex(0x00ff00); });
+                
+                setTimeout(() => {
+                    trans.classList.remove('active');
+                    audio.startNightAmbience();
+                    // ViVi calls
+                    state.phoneRinging = true;
+                    audio.playPhone();
+                    setTimeout(() => {
+                        viviNightCall();
+                    }, 2000);
+                }, 800);
+            }, 1200);
+        }
+        
+        function checkNightComplete() {
+            // Three main tasks done - now need to log out
+            if (state.doorsLocked.front && state.doorsLocked.back && state.tillCounted && !state.readyToLogout) {
+                state.readyToLogout = true;
+                setTimeout(() => {
+                    showDialogue('', 'Tasks complete. Log out on the computer to end your shift.');
+                    updateTaskDisplay();
+                }, 1500);
+            }
+        }
+        
+        function completeNight() {
+            state.readyToLogout = false;
+            setTimeout(() => {
+                if (state.day >= 5) {
+                    triggerEnding();
+                } else {
+                    showDialogue('', 'Shift complete.');
+                    setTimeout(() => nextDay(), 2000);
+                }
+            }, 800);
+        }
+
+        function nextDay() {
+            const trans = document.getElementById('transition');
+            document.getElementById('transition-text').textContent = 'DAY ' + (state.day + 1);
+            document.getElementById('transition-subtext').textContent = state.day >= 3 ? 'Something feels wrong.' : '';
+            trans.classList.add('active');
+            audio.stopNightAmbience();
+            audio.stopSprinklers();
+            document.getElementById('sprinkler-overlay').classList.remove('active');
+            
+            // Reset mannequins
+            mannequins.forEach((m, i) => {
+                m.position.x = mannequinData[i].x;
+                m.position.z = mannequinData[i].z;
+                m.position.y = 0;
+                m.rotation.x = 0;
+                m.rotation.y = 0;
+            });
+            
+            // Reset clothing racks
+            const rackPositions = [
+                { x: -12, z: -14 }, { x: -12, z: -4 }, { x: -12, z: 6 },
+                { x: 12, z: -14 }, { x: 12, z: -4 }, { x: 12, z: 6 },
+                { x: -3, z: -20 }, { x: 3, z: -20 },
+            ];
+            clothingRacks.forEach((rack, i) => {
+                if (rackPositions[i]) {
+                    rack.position.x = rackPositions[i].x;
+                    rack.position.z = rackPositions[i].z;
+                    rack.position.y = 0;
+                    rack.rotation.z = 0;
+                }
+            });
+            
+            // Sanity recovery
+            modifySanity(40);
+            
+            setTimeout(() => {
+                state.day++;
+                state.hour = 9; state.minute = 0;
+                state.isNight = false;
+                state.doorsLocked = { front: false, back: false };
+                state.tillCounted = false;
+                state.customersServedToday = 0;
+                state.customersNeeded = 2 + state.day;
+                state.closingTimerActive = false;
+                state.mannequinsMoved = 0;
+                state.phoneRinging = false;
+                state.computerTask = null;
+                state.wifiDown = false;
+                state.annaTask = null;
+                state.annaOnBreak = false;
+                state.pendingCall = null;
+                state.customerServed = false;
+                state.nightEventTriggered = false;
+                state.sprinklersTriggered = false;
+                state.readyToLogout = false;
+                
+                doors.forEach(d => {
+                    d.userData.locked = false;
+                    d.traverse(c => { if (c.userData.isLockIndicator) c.material = new THREE.MeshBasicMaterial({ color: 0x444444 }); });
+                });
+                router.traverse(c => { if (c.userData.isRouterLight) c.material.color.setHex(0x00ff00); });
+                lights.forEach(l => l.intensity = 0.65);
+                document.getElementById('night-tint').classList.remove('active');
+                updateTimeDisplay();
+                updateTaskDisplay();
+                
+                setTimeout(() => {
+                    trans.classList.remove('active');
+                    audio.startDayMusic();
+                    
+                    // Story progression dialogue
+                    if (state.day === 3 && state.learnedAboutMaya) {
+                        showDialogue('Lina', "I need to find out what happened to Maya.", 'internal');
+                    } else if (state.day === 4) {
+                        showDialogue('Lina', "One more day after this. Just one more.", 'internal');
+                    } else if (state.day === 5) {
+                        showDialogue('Lina', "Last day. Whatever happens, it ends tonight.", 'internal');
+                    }
+                    
+                    setTimeout(() => spawnCustomer(), 3500);
+                }, 800);
+            }, 1200);
+        }
+
+        // ============ ENDINGS ============
+        function triggerEnding() {
+            // Determine ending based on phone answer ratio (>50% = good, <50% = bad)
+            const phoneRatio = state.phoneTotal > 0 ? state.phoneAnswered / state.phoneTotal : 0.5;
+            const goodEnding = phoneRatio >= 0.5;
+            
+            if (goodEnding) {
+                triggerGoodEnding();
+            } else {
+                triggerBadEndingFinal();
+            }
+        }
+        
+        function triggerGoodEnding() {
+            // Good ending - fire starts, ViVi tells you to escape
+            state.ending = 'escape';
+            console.log('=== GOOD ENDING TRIGGERED ===');
+            
+            // Start fire effects
+            document.getElementById('fire-overlay').classList.add('active');
+            audio.playFire();
+            
+            playDialogueSequence([
+                { s: '', t: 'FIRE! The store is burning!', creepy: true },
+                { s: 'Lina', t: "No no no—" },
+            ], () => {
+                state.phoneRinging = true;
+                audio.playPhone();
+                setTimeout(() => {
+                    state.phoneRinging = false;
+                    playDialogueSequence([
+                        { s: 'ViVi', t: "LINA! The front's blocked!" },
+                        { s: 'ViVi', t: "Emergency exit on the LEFT WALL! RUN!" },
+                    ], () => {
+                        showDialogue('', 'Find the RED DOOR on the LEFT WALL!', 'creepy');
+                        state.escapeActive = true;
+                        showEscapeDoor();
+                        updateTaskDisplay();
+                        console.log('escapeActive is now:', state.escapeActive);
+                    });
+                }, 2000);
+            });
+        }
+        
+        function handleEscapeDoor() {
+            // Called when player reaches stockroom during escape
+            state.escapeActive = false;
+            audio.stopFire();
+            document.getElementById('fire-overlay').classList.remove('active');
+            
+            playDialogueSequence([
+                { s: '', t: 'You burst through the stockroom door into the night air.' },
+                { s: '', t: 'Behind you, The Pull of Bear burns.' },
+                { s: '', t: 'In the flames, you see her one last time.' },
+                { s: '', t: 'Maya. Smiling.' },
+                { s: 'Maya', t: "Thank you.", creepy: true },
+            ], () => {
+                setTimeout(() => {
+                    showEnding("REST IN PEACE",
+                        "The Pull of Bear burned to the ground that night.\n\nThe company decided not to rebuild. Not this time.\n\nMaya Chen's spirit, trapped for five years in the store that claimed her life, was finally free.\n\nYou answered " + state.phoneAnswered + " of " + state.phoneTotal + " calls. You stayed connected. And that made all the difference.");
+                }, 2000);
+            });
+        }
+        
+        function triggerBadEndingFinal() {
+            // Bad ending - ViVi lures you to stockroom, Maya traps you
+            state.ending = 'trapped';
+            console.log('=== BAD ENDING TRIGGERED ===');
+            
+            playDialogueSequence([
+                { s: 'ViVi', t: "Lina. Come to the back." },
+                { s: 'Lina', t: "ViVi? Why?" },
+                { s: 'ViVi', t: "There's something you need to see...", creepy: true },
+            ], () => {
+                showDialogue('', 'Go to the RED DOOR on the LEFT WALL.', 'creepy');
+                state.trapActive = true;
+                showEscapeDoor();
+                updateTaskDisplay();
+                console.log('trapActive is now:', state.trapActive);
+            });
+        }
+        
+        function handleTrapDoor() {
+            // Called when player enters stockroom during trap
+            state.trapActive = false;
+            
+            // Door slams shut
+            audio.playDoorLock();
+            showDialogue('', 'The door SLAMS shut behind you.', 'creepy');
+            
+            setTimeout(() => {
+                // Maya appears
+                lights.forEach(l => l.intensity = 0.1);
+                audio.playCreepy();
+                
+                playDialogueSequence([
+                    { s: 'Maya', t: "You came.", creepy: true },
+                    { s: 'Lina', t: "Where's ViVi?!" },
+                    { s: 'Maya', t: "There is no ViVi.", creepy: true },
+                    { s: 'Maya', t: "Just me. Just us.", creepy: true },
+                ], () => {
+                    // Sprinklers go off
+                    audio.startSprinklers();
+                    document.getElementById('sprinkler-overlay').classList.add('active');
+                    
+                    setTimeout(() => {
+                        playDialogueSequence([
+                            { s: 'Maya', t: "The sprinklers... they tried to save me too.", creepy: true },
+                            { s: 'Maya', t: "They couldn't stop the fire.", creepy: true },
+                            { s: 'Maya', t: "Nothing can.", creepy: true },
+                        ], () => {
+                            // Fire starts
+                            audio.stopSprinklers();
+                            document.getElementById('sprinkler-overlay').classList.remove('active');
+                            document.getElementById('fire-overlay').classList.add('active');
+                            audio.playFire();
+                            
+                            setTimeout(() => {
+                                showEnding("CONSUMED",
+                                    "The fire spread too fast. The door wouldn't open.\n\nThey found the store burned to the ground the next morning. Two bodies this time.\n\nThe company rebuilt it exactly the same.\n\nYou only answered " + state.phoneAnswered + " of " + state.phoneTotal + " calls. You stopped listening. Just like Maya did.");
+                            }, 4000);
+                        });
+                    }, 3000);
+                });
+            }, 2000);
+        }
+        
+        function triggerBadEnding(reason) {
+            state.gameStarted = false;
+            audio.stopNightAmbience();
+            audio.stopDayMusic();
+            audio.stopSprinklers();
+            audio.stopFire();
+            
+            if (reason === 'sanity') {
+                showEnding("LOST",
+                    "Your mind couldn't take it. The last thing you remember is the mannequins, all around you, getting closer. Their faces... they were smiling.\n\nThey never found you.");
+            }
+        }
+        
+        function showEnding(title, text) {
+            state.gameStarted = false;
+            audio.stopNightAmbience();
+            audio.stopDayMusic();
+            audio.stopFire();
+            document.exitPointerLock();
+            
+            document.getElementById('gameover-title').textContent = title;
+            document.getElementById('gameover-text').textContent = text;
+            document.getElementById('game-over').classList.add('active');
+        }
+
+        // ============ MAIN LOOP ============
+        const clock = new THREE.Clock();
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = Math.min(clock.getDelta(), 0.1);
+            if (state.gameStarted) {
+                updatePlayer(delta);
+                updateCustomer(delta);
+                updateGameTime(delta);
+                updateNight(delta);
+                checkInteractables();
+                
+                // Random light flicker
+                if (Math.random() > 0.997) {
+                    const l = lights[Math.floor(Math.random() * lights.length)];
+                    const base = state.isNight ? 0.35 : 0.65;
+                    l.intensity = 0.1;
+                    setTimeout(() => l.intensity = base, 50);
+                }
+                
+                // Low sanity effects
+                if (state.sanity < 40 && Math.random() > 0.998) {
+                    audio.playHeartbeat();
+                }
+            }
+            renderer.render(scene, camera);
+        }
+
+        // ============ START ============
+        document.getElementById('start-btn').addEventListener('click', () => {
+            audio.init();
+            document.getElementById('title-screen').style.display = 'none';
+            const trans = document.getElementById('transition');
+            document.getElementById('transition-text').textContent = 'DAY 1';
+            document.getElementById('transition-subtext').textContent = 'First night shift.';
+            trans.classList.add('active');
+            
+            setTimeout(() => {
+                state.gameStarted = true;
+                state.customersNeeded = 3;
+                
+                // Reset camera position and rotation
+                camera.position.set(0, 1.6, 18);
+                cameraYaw = Math.PI;
+                cameraPitch = 0;
+                
+                updateSanityDisplay();
+                if (!/Mobi|Android/i.test(navigator.userAgent)) canvas.requestPointerLock();
+                trans.classList.remove('active');
+                audio.startDayMusic();
+                showDialogue('', 'Your first shift at The Pull of Bear.');
+                setTimeout(() => showDialogue('Lina', "Should be easy enough.", 'internal'), 3000);
+                updateTaskDisplay();
+                
+                // Trigger first events after a short delay
+                setTimeout(() => spawnCustomer(), 4500);
+                setTimeout(() => triggerRandomTask(), 8000); // Force first task
+                setTimeout(() => triggerRandomTask(), 15000); // Second task
+            }, 1500);
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+        
+        animate();
+    </script>
+</body>
+</html>
